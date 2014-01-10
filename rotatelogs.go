@@ -1,28 +1,6 @@
 /*
 
-Port of File-RotateLogs from Perl (http://metacpan.org/release/File-RotateLogs)
-
-It's easy to integrate this with the `log` mechanism that comes with go itself
-
-  import(
-    "github.com/lestrrat/go-file-rotatelogs"
-  )
-  
-  func main() {
-    logs := &rotatelogs.NewRotateLogs(
-      "/path/to/access_log.%Y%m%d%H%M",
-    )
-
-    // Optional fields must be set afterwards
-    logs.LinkName     = "/path/to/access_log"
-    logs.RotationTime = 3600
-    logs.MaxAge       = 86400
-    logs.Offset       = 0
-    if err != nil {
-      log.Fatalf("Failed to create new log output")
-    }
-    log.SetOutput(rotatelogs)
-  }
+Port of File-RotateLogs from Perl (https://metacpan.org/release/File-RotateLogs)
 
 */
 
