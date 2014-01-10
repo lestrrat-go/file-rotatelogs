@@ -60,6 +60,7 @@ func TestLogRotate (t *testing.T) {
   // Change current time, so we can safely purge old logs
   old := CurrentTime
   dummyTime := time.Now().Add(-7 * 86400 * time.Second)
+  dummyTime  = dummyTime.Add(time.Duration(-1 * dummyTime.Nanosecond()))
   defer func() { CurrentTime = old }()
   CurrentTime = func() (time.Time) { return dummyTime }
 
@@ -95,6 +96,16 @@ func TestLogRotate (t *testing.T) {
   if err != nil {
     t.Errorf("Failed to change access/modification times for %s: %s", fn, err)
   }
+
+  fi, err := os.Stat(fn)
+  if err != nil {
+    t.Errorf("Failed to stat %s: %s", fn, err)
+  }
+
+  if ! fi.ModTime().Equal(dummyTime) {
+    t.Errorf("Failed to chtime for %s (expected %s, got %s)", fn, fi.ModTime(), dummyTime)
+  }
+
   CurrentTime = old
 
   rl.Write([]byte(str))
