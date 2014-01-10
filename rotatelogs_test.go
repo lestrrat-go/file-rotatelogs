@@ -91,7 +91,10 @@ func TestLogRotate (t *testing.T) {
     t.Errorf(`File content does not match (was "%s")`,  content)
   }
 
-  os.Chtimes(fn, dummyTime, dummyTime)
+  err = os.Chtimes(fn, dummyTime, dummyTime)
+  if err != nil {
+    t.Errorf("Failed to change access/modification times for %s: %s", fn, err)
+  }
   CurrentTime = old
 
   rl.Write([]byte(str))
