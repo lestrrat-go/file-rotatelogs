@@ -123,7 +123,9 @@ func (self *RotateLogs) Write(p []byte) (n int, err error) {
 
   n, err = out.Write(p)
 
-  self.outFh.Close()
+  if self.outFh != nil {
+    self.outFh.Close()
+  }
   self.outFh = out
   self.curFn = filename
 
