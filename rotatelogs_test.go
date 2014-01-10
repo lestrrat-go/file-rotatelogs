@@ -108,6 +108,7 @@ func TestLogRotate (t *testing.T) {
 
   CurrentTime = old
 
+  // This next Write() should trigger Rotate()
   rl.Write([]byte(str))
   newfn := rl.CurrentFileName()
   if newfn == fn {
@@ -122,6 +123,8 @@ func TestLogRotate (t *testing.T) {
   if string(content) != str {
     t.Errorf(`File content does not match (was "%s")`,  content)
   }
+
+  time.Sleep(1 * time.Second)
 
   // fn was declared above, before mocking CurrentTime
   // Old files should have been unlinked
