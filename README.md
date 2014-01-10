@@ -34,9 +34,7 @@ func main() {
     rl.RotationTime = 3600 * time.Second
     rl.MaxAge       = 86400 * time.Second
     rl.Offset       = 0
-    if err != nil {
-        log.Fatalf("Failed to create new log output")
-    }
+
     log.SetOutput(rl)
 
     /* elsewhere ... */
