@@ -15,6 +15,9 @@ To install, simply issue a `go get`:
 go get github.com/lestrrat/go-file-rotatelogs
 ```
 
+It's normally expected that this library is used with the built-in `log`
+library, so that everything your app produces goes through this library:
+
 ```go
 import(
     "log"
