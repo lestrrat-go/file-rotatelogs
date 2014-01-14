@@ -104,8 +104,8 @@ func (self *RotateLogs) Write(p []byte) (n int, err error) {
 
   if isNew && self.outFh != nil {
     self.outFh.Close()
+    self.outFh = out
   }
-  self.outFh = out
   self.curFn = filename
 
   return n, err
