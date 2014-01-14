@@ -17,10 +17,6 @@ import(
   "bitbucket.org/tebeka/strftime"
 )
 
-type Clock interface {
-  Now() time.Time
-}
-
 type RotateLogs struct {
   LogFile string
   LinkName  string
@@ -33,7 +29,9 @@ type RotateLogs struct {
   logfilePattern string
 }
 
-// Make it overridable
+/* CurrentTime is only used for testing. Normally it's the time.Now()
+ * function
+ */
 var CurrentTime = time.Now
 
 func NewRotateLogs(logfile string) (*RotateLogs) {
