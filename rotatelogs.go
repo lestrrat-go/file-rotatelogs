@@ -73,8 +73,9 @@ func (self *RotateLogs) Write(p []byte) (n int, err error) {
     out = self.outFh // use old one
   }
 
+  isNew := false
   if out == nil {
-    isNew := true
+    isNew = true
 
     _, err := os.Stat(filename)
     if err == nil {
@@ -101,7 +102,7 @@ func (self *RotateLogs) Write(p []byte) (n int, err error) {
 
   n, err = out.Write(p)
 
-  if self.outFh != nil {
+  if isNew && self.outFh != nil {
     self.outFh.Close()
   }
   self.outFh = out
