@@ -107,7 +107,9 @@ func (self *RotateLogs) Write(p []byte) (n int, err error) {
 
   n, err = out.Write(p)
 
-  if isNew && self.outFh != nil {
+  if self.outFh == nil {
+    self.outFh = out
+  } else if isNew {
     self.outFh.Close()
     self.outFh = out
   }
