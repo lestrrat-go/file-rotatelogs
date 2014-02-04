@@ -27,6 +27,7 @@ type RotateLogs struct {
   curFn string
   outFh *os.File
   logfilePattern string
+  sem chan bool
 }
 
 /* CurrentTime is only used for testing. Normally it's the time.Now()
@@ -44,6 +45,7 @@ func NewRotateLogs(logfile string) (*RotateLogs) {
     "",
     nil,
     "",
+    make(chan bool, 1),
   }
 }
 
@@ -59,8 +61,13 @@ func (self *RotateLogs) GenFilename() (string, error) {
 }
 
 func (self *RotateLogs) Write(p []byte) (n int, err error) {
+  // Guard against concurrent writes
+  self.sem <-true
+  defer func() { <-self.sem }()
+
   // This filename contains the name of the "NEW" filename
   // to log to, which may be newer than self.currentFilename
+
   filename, err := self.GenFilename()
   if err != nil {
     return 0, err
