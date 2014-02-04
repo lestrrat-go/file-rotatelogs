@@ -23,6 +23,7 @@ func TestGenFilename(t *testing.T) {
   for _, xt := range ts {
     CurrentTime = func() (time.Time) { return xt }
     rl := NewRotateLogs("/path/to/%Y/%m/%d")
+    defer rl.Close()
 
     fn, err := rl.GenFilename()
     if err != nil {
@@ -44,6 +45,7 @@ func TestGenFilename(t *testing.T) {
 
 func TestLogFilePattern (t *testing.T) {
   rl := NewRotateLogs("/path/to/%Y/%m/%d")
+  defer rl.Close()
   pattern := rl.LogFilePattern()
   if pattern != "/path/to/*/*/*" {
     t.Errorf("Failed to match pattern (%s)", pattern)
@@ -65,6 +67,8 @@ func TestLogRotate (t *testing.T) {
   CurrentTime = func() (time.Time) { return dummyTime }
 
   rl := NewRotateLogs(filepath.Join(dir, "log%Y%m%d%H%M%S"))
+  defer rl.Close()
+
   rl.MaxAge = 86400 * time.Second
   rl.LinkName = filepath.Join(dir, "log")
 
@@ -151,6 +155,7 @@ func TestLogSetOutput (t *testing.T) {
   defer os.RemoveAll(dir)
 
   rl := NewRotateLogs(filepath.Join(dir, "log%Y%m%d%H%M%S"))
+  defer rl.Close()
 
   log.SetOutput(rl)
   defer log.SetOutput(os.Stderr)

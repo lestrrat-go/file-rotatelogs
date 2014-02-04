@@ -212,3 +212,11 @@ func (self *RotateLogs) Rotate(filename string) (error) {
 
   return nil
 }
+
+func (self *RotateLogs) Close() (error) {
+  if self.outFh != nil {
+    self.outFh.Close()
+    self.outFh = nil
+  }
+  return nil
+}
