@@ -7,13 +7,14 @@ Port of File-RotateLogs from Perl (https://metacpan.org/release/File-RotateLogs)
 package rotatelogs
 
 import (
-	"bitbucket.org/tebeka/strftime"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"bitbucket.org/tebeka/strftime"
 )
 
 type RotateLogs struct {
@@ -26,7 +27,7 @@ type RotateLogs struct {
 	curFn          string
 	outFh          *os.File
 	logfilePattern string
-	sem            chan bool
+	sem            chan struct{}
 }
 
 /* CurrentTime is only used for testing. Normally it's the time.Now()
@@ -36,15 +37,15 @@ var CurrentTime = time.Now
 
 func NewRotateLogs(logfile string) *RotateLogs {
 	return &RotateLogs{
-		logfile,
-		"",
-		86400 * time.Second,
-		0,
-		0,
-		"",
-		nil,
-		"",
-		make(chan bool, 1),
+		LogFile:        logfile,
+		LinkName:       "",
+		RotationTime:   86400 * time.Second,
+		MaxAge:         0,
+		Offset:         0,
+		curFn:          "",
+		outFh:          nil,
+		logfilePattern: "",
+		sem:            make(chan struct{}, 1),
 	}
 }
 
@@ -61,7 +62,7 @@ func (rl *RotateLogs) GenFilename() (string, error) {
 
 func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	// Guard against concurrent writes
-	rl.sem <- true
+	rl.sem <- struct{}{}
 	defer func() { <-rl.sem }()
 
 	// This filename contains the name of the "NEW" filename
