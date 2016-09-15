@@ -1,4 +1,4 @@
-package rotatelogs
+package rotatelogs_test
 
 import (
 	"fmt"
@@ -9,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jonboulle/clockwork"
+	rotatelogs "github.com/lestrrat/go-file-rotatelogs"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGenFilename(t *testing.T) {
@@ -18,16 +22,16 @@ func TestGenFilename(t *testing.T) {
 		(time.Time{}).Add(24 * time.Hour),
 	}
 
-	var old = CurrentTime
-	defer func() { CurrentTime = old }()
 	for _, xt := range ts {
-		CurrentTime = func() time.Time { return xt }
-		rl := NewRotateLogs("/path/to/%Y/%m/%d")
+		rl := rotatelogs.New(
+			"/path/to/%Y/%m/%d",
+			rotatelogs.WithClock(clockwork.NewFakeClockAt(xt)),
+		)
 		defer rl.Close()
 
 		fn, err := rl.GenFilename()
-		if err != nil {
-			t.Errorf("Failed to generate filename: %s", err)
+		if !assert.NoError(t, err, "filename generation should succeed") {
+			return
 		}
 
 		expected := fmt.Sprintf("/path/to/%04d/%02d/%02d",
@@ -36,50 +40,40 @@ func TestGenFilename(t *testing.T) {
 			xt.Day(),
 		)
 
-		if fn != expected {
-			t.Errorf("Failed to match fn (%s)", fn)
+		if !assert.Equal(t, expected, fn) {
+			return
 		}
-		t.Logf("fn = %s", fn)
-	}
-}
-
-func TestLogFilePattern(t *testing.T) {
-	rl := NewRotateLogs("/path/to/%Y/%m/%d")
-	defer rl.Close()
-	pattern := rl.LogFilePattern()
-	if pattern != "/path/to/*/*/*" {
-		t.Errorf("Failed to match pattern (%s)", pattern)
 	}
 }
 
 func TestLogRotate(t *testing.T) {
 	dir, err := ioutil.TempDir("", "file-rotatelogs-test")
-	if err != nil {
-		t.Errorf("Failed to create temporary directory: %s", err)
+	if !assert.NoError(t, err, "creating temporary directory should succeed") {
+		return
 	}
 	defer os.RemoveAll(dir)
 
 	// Change current time, so we can safely purge old logs
-	old := CurrentTime
-	dummyTime := time.Now().Add(-7 * 86400 * time.Second)
+	dummyTime := time.Now().Add(-7 * 24 * time.Hour)
 	dummyTime = dummyTime.Add(time.Duration(-1 * dummyTime.Nanosecond()))
-	defer func() { CurrentTime = old }()
-	CurrentTime = func() time.Time { return dummyTime }
-
-	rl := NewRotateLogs(filepath.Join(dir, "log%Y%m%d%H%M%S"))
+	clock := clockwork.NewFakeClockAt(dummyTime)
+	linkName := filepath.Join(dir, "log")
+	rl := rotatelogs.New(
+		filepath.Join(dir, "log%Y%m%d%H%M%S"),
+		rotatelogs.WithClock(clock),
+		rotatelogs.WithMaxAge(24*time.Hour),
+		rotatelogs.WithLinkName(linkName),
+	)
 	defer rl.Close()
-
-	rl.MaxAge = 86400 * time.Second
-	rl.LinkName = filepath.Join(dir, "log")
 
 	str := "Hello, World"
 	n, err := rl.Write([]byte(str))
-	if n != len(str) {
-		t.Errorf("Could not write %d bytes (wrote %d bytes)", len(str), n)
+	if !assert.NoError(t, err, "rl.Write should succeed") {
+		return
 	}
 
-	if err != nil {
-		t.Errorf("Failed to Write() to log: %s", err)
+	if !assert.Len(t, str, n, "rl.Write should succeed") {
+		return
 	}
 
 	fn := rl.CurrentFileName()
@@ -110,7 +104,7 @@ func TestLogRotate(t *testing.T) {
 		t.Errorf("Failed to chtime for %s (expected %s, got %s)", fn, fi.ModTime(), dummyTime)
 	}
 
-	CurrentTime = old
+	clock.Advance(time.Duration(7 * 24 * time.Hour))
 
 	// This next Write() should trigger Rotate()
 	rl.Write([]byte(str))
@@ -128,18 +122,18 @@ func TestLogRotate(t *testing.T) {
 		t.Errorf(`File content does not match (was "%s")`, content)
 	}
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(time.Second)
 
 	// fn was declared above, before mocking CurrentTime
 	// Old files should have been unlinked
 	_, err = os.Stat(fn)
-	if err == nil {
-		t.Errorf("Stat succeeded (should have failed) %s: %s", fn, err)
+	if !assert.Error(t, err, "os.Stat should have failed") {
+		return
 	}
 
-	linkDest, err := os.Readlink(rl.LinkName)
+	linkDest, err := os.Readlink(linkName)
 	if err != nil {
-		t.Errorf("Failed to readlink %s: %s", rl.LinkName, err)
+		t.Errorf("Failed to readlink %s: %s", linkName, err)
 	}
 
 	if linkDest != newfn {
@@ -154,7 +148,7 @@ func TestLogSetOutput(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	rl := NewRotateLogs(filepath.Join(dir, "log%Y%m%d%H%M%S"))
+	rl := rotatelogs.New(filepath.Join(dir, "log%Y%m%d%H%M%S"))
 	defer rl.Close()
 
 	log.SetOutput(rl)

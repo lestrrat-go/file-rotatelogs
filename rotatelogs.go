@@ -7,53 +7,108 @@ Port of File-RotateLogs from Perl (https://metacpan.org/release/File-RotateLogs)
 package rotatelogs
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"bitbucket.org/tebeka/strftime"
 )
 
 type RotateLogs struct {
-	LogFile      string
-	LinkName     string
-	RotationTime time.Duration
-	MaxAge       time.Duration
-	Offset       time.Duration
-
-	curFn          string
-	outFh          *os.File
-	logfilePattern string
-	sem            chan struct{}
+	clock        Clock
+	curFn        string
+	globPattern  string
+	linkName     string
+	maxAge       time.Duration
+	mutex        sync.Mutex
+	offset       time.Duration
+	outFh        *os.File
+	pattern      string
+	rotationTime time.Duration
 }
 
-/* CurrentTime is only used for testing. Normally it's the time.Now()
- * function
- */
-var CurrentTime = time.Now
+type Clock interface {
+	Now() time.Time
+}
+type clockFn func() time.Time
 
-func NewRotateLogs(logfile string) *RotateLogs {
-	return &RotateLogs{
-		LogFile:        logfile,
-		LinkName:       "",
-		RotationTime:   86400 * time.Second,
-		MaxAge:         0,
-		Offset:         0,
-		curFn:          "",
-		outFh:          nil,
-		logfilePattern: "",
-		sem:            make(chan struct{}, 1),
+func (c clockFn) Now() time.Time {
+	return c()
+}
+
+type Option interface {
+	Set(*RotateLogs) error
+}
+
+type OptionFn func(*RotateLogs) error
+
+func (o OptionFn) Set(rl *RotateLogs) error {
+	return o(rl)
+}
+
+func WithClock(c Clock) Option {
+	return OptionFn(func(rl *RotateLogs) error {
+		rl.clock = c
+		return nil
+	})
+}
+
+func WithLinkName(s string) Option {
+	return OptionFn(func(rl *RotateLogs) error {
+		rl.linkName = s
+		return nil
+	})
+}
+
+func WithMaxAge(d time.Duration) Option {
+	return OptionFn(func(rl *RotateLogs) error {
+		rl.maxAge = d
+		return nil
+	})
+}
+
+func WithOffset(d time.Duration) Option {
+	return OptionFn(func(rl *RotateLogs) error {
+		rl.offset = d
+		return nil
+	})
+}
+
+func WithRotationTime(d time.Duration) Option {
+	return OptionFn(func(rl *RotateLogs) error {
+		rl.rotationTime = d
+		return nil
+	})
+}
+
+func New(pattern string, options ...Option) *RotateLogs {
+	globPattern := pattern
+	for _, re := range patternConversionRegexps {
+		globPattern = re.ReplaceAllString(globPattern, "*")
 	}
+
+	var rl RotateLogs
+	rl.clock = clockFn(time.Now)
+	rl.globPattern = globPattern
+	rl.pattern = pattern
+	rl.rotationTime = 24 * time.Hour
+	for _, opt := range options {
+		opt.Set(&rl)
+	}
+
+	return &rl
 }
 
 func (rl *RotateLogs) GenFilename() (string, error) {
-	now := CurrentTime()
-	diff := time.Duration(now.Add(rl.Offset).UnixNano()) % rl.RotationTime
+	now := rl.clock.Now()
+	diff := time.Duration(now.Add(rl.offset).UnixNano()) % rl.rotationTime
 	t := now.Add(time.Duration(-1 * diff))
-	str, err := strftime.Format(rl.LogFile, t)
+	str, err := strftime.Format(rl.pattern, t)
 	if err != nil {
 		return "", err
 	}
@@ -62,8 +117,8 @@ func (rl *RotateLogs) GenFilename() (string, error) {
 
 func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	// Guard against concurrent writes
-	rl.sem <- struct{}{}
-	defer func() { <-rl.sem }()
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
 
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
@@ -73,19 +128,22 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 
+	println(filename)
+	println(rl.curFn)
 	var out *os.File
 	if filename == rl.curFn { // Match!
 		out = rl.outFh // use old one
 	}
 
-	isNew := false
+	var isNew bool
+
 	if out == nil {
 		isNew = true
 
 		_, err := os.Stat(filename)
 		if err == nil {
-			if rl.LinkName != "" {
-				_, err = os.Lstat(rl.LinkName)
+			if rl.linkName != "" {
+				_, err = os.Lstat(rl.linkName)
 				if err == nil {
 					isNew = false
 				}
@@ -94,12 +152,15 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 
 		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
-			return 0, fmt.Errorf("error: Failed to open file %s: %s", rl.LogFile, err)
+			return 0, fmt.Errorf("error: Failed to open file %s: %s", rl.pattern, err)
 		}
 
 		out = fh
 		if isNew {
-			rl.Rotate(filename)
+			println("Calling rotate")
+			if err := rl.rotate(filename); err != nil {
+				println(err.Error())
+			}
 		}
 	}
 
@@ -125,61 +186,60 @@ var patternConversionRegexps = []*regexp.Regexp{
 	regexp.MustCompile(`\*+`),
 }
 
-func (rl *RotateLogs) LogFilePattern() string {
-	if rl.logfilePattern == "" {
-		lf := rl.LogFile
-
-		for _, re := range patternConversionRegexps {
-			lf = re.ReplaceAllString(lf, "*")
-		}
-		rl.logfilePattern = lf
-	}
-	return rl.logfilePattern
+type cleanupGuard struct {
+	enable bool
+	fn     func()
+	mutex  sync.Mutex
 }
 
-func (rl *RotateLogs) Rotate(filename string) error {
+func (g *cleanupGuard) Enable() {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	g.enable = true
+}
+func (g *cleanupGuard) Run() {
+	g.fn()
+}
+
+func (rl *RotateLogs) rotate(filename string) error {
 	lockfn := fmt.Sprintf("%s_lock", filename)
+
 	fh, err := os.OpenFile(lockfn, os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		// Can't lock, just return
 		return err
 	}
 
-	goneToBackground := false
-	guard := func() {
+	var guard cleanupGuard
+	guard.fn = func() {
 		fh.Close()
 		os.Remove(lockfn)
 	}
-	defer func() {
-		if !goneToBackground {
-			guard()
-		}
-	}()
+	defer guard.Run()
 
-	if rl.LinkName != "" {
+	if rl.linkName != "" {
 		tmpLinkName := fmt.Sprintf("%s_symlink", filename)
 		err = os.Symlink(filename, tmpLinkName)
 		if err != nil {
 			return err
 		}
 
-		err = os.Rename(tmpLinkName, rl.LinkName)
+		err = os.Rename(tmpLinkName, rl.linkName)
 		if err != nil {
 			return err
 		}
 	}
 
-	if rl.MaxAge <= 0 {
-		return nil
+	if rl.maxAge <= 0 {
+		return errors.New("maxAge not set, not rotating")
 	}
 
-	pattern := rl.LogFilePattern()
-	matches, err := filepath.Glob(pattern)
+	matches, err := filepath.Glob(rl.globPattern)
 	if err != nil {
 		return err
 	}
 
-	cutoff := CurrentTime().Add(-1 * rl.MaxAge)
+	cutoff := rl.clock.Now().Add(-1 * rl.maxAge)
 	var toUnlink []string
 	for _, path := range matches {
 		// Ignore lock files
@@ -199,12 +259,11 @@ func (rl *RotateLogs) Rotate(filename string) error {
 	}
 
 	if len(toUnlink) <= 0 {
-		return nil
+		return errors.New("nothing to unlink")
 	}
 
-	goneToBackground = true
+	guard.Enable()
 	go func() {
-		defer guard()
 		// unlink files on a separate goroutine
 		for _, path := range toUnlink {
 			os.Remove(path)
@@ -215,9 +274,14 @@ func (rl *RotateLogs) Rotate(filename string) error {
 }
 
 func (rl *RotateLogs) Close() error {
-	if rl.outFh != nil {
-		rl.outFh.Close()
-		rl.outFh = nil
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+
+	if rl.outFh == nil {
+		return nil
 	}
+
+	rl.outFh.Close()
+	rl.outFh = nil
 	return nil
 }
