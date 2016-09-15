@@ -29,9 +29,10 @@ func (o OptionFn) Configure(rl *RotateLogs) error {
 // that the RotateLogs object will use to determine
 // the current time. 
 //
-// By default the local time is used. If you would rather
-// use UTC, create an object that returns the time in UTC
-// instead of the local time zone.
+// By default rotatelogs.Local, which returns the
+// current time in the local time zone, is used. If you
+// would rather use UTC, use rotatelogs.UTC as the argument
+// to this option, and pass it to the constructor.
 func WithClock(c Clock) Option {
 	return OptionFn(func(rl *RotateLogs) error {
 		rl.clock = c
@@ -77,7 +78,7 @@ func New(pattern string, options ...Option) *RotateLogs {
 	}
 
 	var rl RotateLogs
-	rl.clock = clockFn(time.Now)
+	rl.clock = Local
 	rl.globPattern = globPattern
 	rl.pattern = pattern
 	rl.rotationTime = 24 * time.Hour

@@ -77,6 +77,20 @@ using the strftime (3) format. For example:
   rotatelogs.New("/var/log/myapp/log.%Y%m%d")
 ```
 
+## Clock (default: rotatelogs.Local)
+
+You may specify an object that implements the roatatelogs.Clock interface.
+When this option is supplied, it's used to determine the current time to
+base all of the calculations on. For example, if you want to base your
+calculations in UTC, you may specify rotatelogs.UTC
+
+```go
+  rotatelogs.New(
+    "/var/log/myapp/log.%Y%m%d",
+    rotatelogs.WithClock(rotatelogs.UTC),
+  )
+```
+
 ## LinkName (default: "")
 
 Path where a symlink for the actual log file is placed. This allows you to 

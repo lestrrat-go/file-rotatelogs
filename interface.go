@@ -27,6 +27,14 @@ type Clock interface {
 }
 type clockFn func() time.Time
 
+// UTC is an object satisfying the Clock interface, which
+// returns the current time in UTC
+var UTC = clockFn(func() time.Time { return time.Now().UTC() })
+
+// Local is an object satisfying the Clock interface, which
+// returns the current time in the local timezone
+var Local = clockFn(time.Now)
+
 // Option is used to pass optional arguments to
 // the RotateLogs constructor
 type Option interface {
