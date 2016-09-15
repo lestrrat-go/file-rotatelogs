@@ -1,7 +1,7 @@
 package rotatelogs_test
 
 import (
-	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -15,35 +15,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenFilename(t *testing.T) {
-	// Mock time
-	ts := []time.Time{
-		time.Time{},
-		(time.Time{}).Add(24 * time.Hour),
-	}
+func TestSatisfiesIOWriter(t *testing.T) {
+	var w io.Writer
+	w = rotatelogs.New("/foo/bar")
+	_ = w
+}
 
-	for _, xt := range ts {
-		rl := rotatelogs.New(
-			"/path/to/%Y/%m/%d",
-			rotatelogs.WithClock(clockwork.NewFakeClockAt(xt)),
-		)
-		defer rl.Close()
-
-		fn, err := rl.GenFilename()
-		if !assert.NoError(t, err, "filename generation should succeed") {
-			return
-		}
-
-		expected := fmt.Sprintf("/path/to/%04d/%02d/%02d",
-			xt.Year(),
-			xt.Month(),
-			xt.Day(),
-		)
-
-		if !assert.Equal(t, expected, fn) {
-			return
-		}
-	}
+func TestSatisfiesIOCloser(t *testing.T) {
+	var c io.Closer
+	c = rotatelogs.New("/foo/bar")
+	_ = c
 }
 
 func TestLogRotate(t *testing.T) {

@@ -19,38 +19,21 @@ import (
 	"bitbucket.org/tebeka/strftime"
 )
 
-type RotateLogs struct {
-	clock        Clock
-	curFn        string
-	globPattern  string
-	linkName     string
-	maxAge       time.Duration
-	mutex        sync.Mutex
-	offset       time.Duration
-	outFh        *os.File
-	pattern      string
-	rotationTime time.Duration
-}
-
-type Clock interface {
-	Now() time.Time
-}
-type clockFn func() time.Time
-
 func (c clockFn) Now() time.Time {
 	return c()
 }
 
-type Option interface {
-	Set(*RotateLogs) error
-}
-
-type OptionFn func(*RotateLogs) error
-
-func (o OptionFn) Set(rl *RotateLogs) error {
+func (o OptionFn) Configure(rl *RotateLogs) error {
 	return o(rl)
 }
 
+// WithClock creates a new Option that sets a clock
+// that the RotateLogs object will use to determine
+// the current time. 
+//
+// By default the local time is used. If you would rather
+// use UTC, create an object that returns the time in UTC
+// instead of the local time zone.
 func WithClock(c Clock) Option {
 	return OptionFn(func(rl *RotateLogs) error {
 		rl.clock = c
@@ -58,6 +41,9 @@ func WithClock(c Clock) Option {
 	})
 }
 
+// WithLinkName creates a new Option that sets the
+// symbolic link name that gets linked to the current
+// file name being used.
 func WithLinkName(s string) Option {
 	return OptionFn(func(rl *RotateLogs) error {
 		rl.linkName = s
@@ -65,6 +51,9 @@ func WithLinkName(s string) Option {
 	})
 }
 
+// WithMaxAge creates a new Option that sets the
+// max age of a log file before it gets purged from
+// the file system.
 func WithMaxAge(d time.Duration) Option {
 	return OptionFn(func(rl *RotateLogs) error {
 		rl.maxAge = d
@@ -72,13 +61,8 @@ func WithMaxAge(d time.Duration) Option {
 	})
 }
 
-func WithOffset(d time.Duration) Option {
-	return OptionFn(func(rl *RotateLogs) error {
-		rl.offset = d
-		return nil
-	})
-}
-
+// WithRotationTime creates a new Option that sets the
+// time between rotation.
 func WithRotationTime(d time.Duration) Option {
 	return OptionFn(func(rl *RotateLogs) error {
 		rl.rotationTime = d
@@ -86,6 +70,8 @@ func WithRotationTime(d time.Duration) Option {
 	})
 }
 
+// New creates a new RotateLogs object. A log filename pattern
+// must be passed. Optional `Option` parameters may be passed
 func New(pattern string, options ...Option) *RotateLogs {
 	globPattern := pattern
 	for _, re := range patternConversionRegexps {
@@ -98,15 +84,15 @@ func New(pattern string, options ...Option) *RotateLogs {
 	rl.pattern = pattern
 	rl.rotationTime = 24 * time.Hour
 	for _, opt := range options {
-		opt.Set(&rl)
+		opt.Configure(&rl)
 	}
 
 	return &rl
 }
 
-func (rl *RotateLogs) GenFilename() (string, error) {
+func (rl *RotateLogs) genFilename() (string, error) {
 	now := rl.clock.Now()
-	diff := time.Duration(now.Add(rl.offset).UnixNano()) % rl.rotationTime
+	diff := time.Duration(now.UnixNano()) % rl.rotationTime
 	t := now.Add(time.Duration(-1 * diff))
 	str, err := strftime.Format(rl.pattern, t)
 	if err != nil {
@@ -115,6 +101,10 @@ func (rl *RotateLogs) GenFilename() (string, error) {
 	return str, err
 }
 
+// Write satisfies the io.Writer interface. It writes to the
+// appropriate file handle that is currently being used.
+// If we have reached rotation time, the target file gets
+// automatically rotated, and also purged if necessary.
 func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	// Guard against concurrent writes
 	rl.mutex.Lock()
@@ -123,7 +113,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
 
-	filename, err := rl.GenFilename()
+	filename, err := rl.genFilename()
 	if err != nil {
 		return 0, err
 	}
@@ -172,7 +162,11 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
+// CurrentFileName returns the current file name that
+// the RotateLogs object is writing to
 func (rl *RotateLogs) CurrentFileName() string {
+	rl.mutex.RLock()
+	defer rl.mutex.RUnlock()
 	return rl.curFn
 }
 
@@ -268,6 +262,9 @@ func (rl *RotateLogs) rotate(filename string) error {
 	return nil
 }
 
+// Close satisfies the io.Closer interface. You must
+// call this method if you performed any writes to
+// the object.
 func (rl *RotateLogs) Close() error {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
