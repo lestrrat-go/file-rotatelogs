@@ -128,8 +128,6 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	println(filename)
-	println(rl.curFn)
 	var out *os.File
 	if filename == rl.curFn { // Match!
 		out = rl.outFh // use old one
@@ -157,10 +155,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 
 		out = fh
 		if isNew {
-			println("Calling rotate")
-			if err := rl.rotate(filename); err != nil {
-				println(err.Error())
-			}
+			rl.rotate(filename)
 		}
 	}
 
