@@ -1,9 +1,5 @@
 language: go
+sudo: false
 go:
-    - 1.1
-    - 1.2
-    - tip
-before_script:
-    - go get bitbucket.org/tebeka/strftime
-script:
-    - go test -v
+  - 1.7
+  - tip
