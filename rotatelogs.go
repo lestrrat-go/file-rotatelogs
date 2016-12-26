@@ -40,6 +40,18 @@ func WithClock(c Clock) Option {
 	})
 }
 
+// WithLocation creates a new Option that sets up a
+// "Clock" interface that the RotateLogs object will use
+// to determine the current time.
+//
+// This optin works by always returning the in the given
+// location.
+func WithLocation(loc *time.Location) Option {
+	return WithClock(clockFn(func() time.Time {
+		return time.Now().In(loc)
+	}))
+}
+
 // WithLinkName creates a new Option that sets the
 // symbolic link name that gets linked to the current
 // file name being used.
