@@ -91,6 +91,13 @@ calculations in UTC, you may specify rotatelogs.UTC
   )
 ```
 
+## Location
+
+This is an alternative to the `WithClock` option. Instead of providing an
+explicit clock, you can provide a location for you times. We will create
+a Clock object that produces times in your specified location, and configure
+the rotatelog to respect it.
+
 ## LinkName (default: "")
 
 Path where a symlink for the actual log file is placed. This allows you to 
