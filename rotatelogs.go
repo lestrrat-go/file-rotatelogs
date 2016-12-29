@@ -27,7 +27,7 @@ func (o OptionFn) Configure(rl *RotateLogs) error {
 
 // WithClock creates a new Option that sets a clock
 // that the RotateLogs object will use to determine
-// the current time. 
+// the current time.
 //
 // By default rotatelogs.Local, which returns the
 // current time in the local time zone, is used. If you
@@ -156,7 +156,13 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 
 		out = fh
 		if isNew {
-			rl.rotate(filename)
+			if err := rl.rotate(filename); err != nil {
+				// Failure to rotate is a problem, but it's really not a great
+				// idea to stop your application just because you couldn't rename
+				// your log. For now, we're just going to punt it and write to
+				// os.Stderr
+				fmt.Fprintf(os.Stderr, "failed to rotate: %s\n", err)
+			}
 		}
 	}
 
