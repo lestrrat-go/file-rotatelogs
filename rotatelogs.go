@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/tebeka/strftime"
+	"github.com/tebeka/strftime"
 )
 
 func (c clockFn) Now() time.Time {
