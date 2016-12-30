@@ -265,7 +265,7 @@ func (rl *RotateLogs) rotate(filename string) error {
 	}
 
 	if len(toUnlink) <= 0 {
-		return errors.New("nothing to unlink")
+		return nil
 	}
 
 	guard.Enable()
