@@ -17,13 +17,13 @@ import (
 
 func TestSatisfiesIOWriter(t *testing.T) {
 	var w io.Writer
-	w = rotatelogs.New("/foo/bar")
+	w, _ = rotatelogs.New("/foo/bar")
 	_ = w
 }
 
 func TestSatisfiesIOCloser(t *testing.T) {
 	var c io.Closer
-	c = rotatelogs.New("/foo/bar")
+	c, _ = rotatelogs.New("/foo/bar")
 	_ = c
 }
 
@@ -39,12 +39,15 @@ func TestLogRotate(t *testing.T) {
 	dummyTime = dummyTime.Add(time.Duration(-1 * dummyTime.Nanosecond()))
 	clock := clockwork.NewFakeClockAt(dummyTime)
 	linkName := filepath.Join(dir, "log")
-	rl := rotatelogs.New(
+	rl, err := rotatelogs.New(
 		filepath.Join(dir, "log%Y%m%d%H%M%S"),
 		rotatelogs.WithClock(clock),
 		rotatelogs.WithMaxAge(24*time.Hour),
 		rotatelogs.WithLinkName(linkName),
 	)
+	if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+		return
+	}
 	defer rl.Close()
 
 	str := "Hello, World"
@@ -129,7 +132,10 @@ func TestLogSetOutput(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	rl := rotatelogs.New(filepath.Join(dir, "log%Y%m%d%H%M%S"))
+	rl, err := rotatelogs.New(filepath.Join(dir, "log%Y%m%d%H%M%S"))
+	if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+		return
+	}
 	defer rl.Close()
 
 	log.SetOutput(rl)

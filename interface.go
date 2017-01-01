@@ -4,6 +4,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	strftime "github.com/lestrrat/go-strftime"
 )
 
 // RotateLogs represents a log file that gets
@@ -16,7 +18,7 @@ type RotateLogs struct {
 	maxAge       time.Duration
 	mutex        sync.RWMutex
 	outFh        *os.File
-	pattern      string
+	pattern      *strftime.Strftime
 	rotationTime time.Duration
 }
 

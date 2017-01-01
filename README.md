@@ -12,6 +12,7 @@ Port of [File::RotateLogs](https://metacpan.org/release/File-RotateLogs) from Pe
 
 ```go
 import (
+  "log"
   "net/http"
 
   apachelog "github.com/lestrrat/go-apache-logformat"
@@ -22,12 +23,16 @@ func main() {
   mux := http.NewServeMux()
   mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { ... })
 
-  logf := rotatelogs.New(
+  logf, err := rotatelogs.New(
     "/path/to/access_log.%Y%m%d%H%M",
     rotatelogs.WithLinkName("/path/to/access_log"),
     rotatelogs.WithMaxAge(24 * time.Hour),
     rotatelogs.WithRotationTime(time.Hour),
   )
+  if err != nil {
+    log.Printf("failed to create rotatelogs: %s", err)
+    return
+  }
 
   http.ListenAndServe(":8080", apachelog.Wrap(mux, logf))
 }
@@ -56,7 +61,7 @@ import(
 )
   
 func main() {
-  rl := rotatelogs.NewRotateLogs("/path/to/access_log.%Y%m%d%H%M")
+  rl, _ := rotatelogs.NewRotateLogs("/path/to/access_log.%Y%m%d%H%M")
 
   log.SetOutput(rl)
 

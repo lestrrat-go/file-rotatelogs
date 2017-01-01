@@ -5,7 +5,6 @@
 package rotatelogs
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tebeka/strftime"
+	strftime "github.com/lestrrat/go-strftime"
+	"github.com/pkg/errors"
 )
 
 func (c clockFn) Now() time.Time {
@@ -83,29 +83,34 @@ func WithRotationTime(d time.Duration) Option {
 
 // New creates a new RotateLogs object. A log filename pattern
 // must be passed. Optional `Option` parameters may be passed
-func New(pattern string, options ...Option) *RotateLogs {
+func New(pattern string, options ...Option) (*RotateLogs, error) {
 	globPattern := pattern
 	for _, re := range patternConversionRegexps {
 		globPattern = re.ReplaceAllString(globPattern, "*")
 	}
 
+	strfobj, err := strftime.New(pattern)
+	if err != nil {
+		return nil, errors.Wrap(err, `invalid strftime pattern`)
+	}
+
 	var rl RotateLogs
 	rl.clock = Local
 	rl.globPattern = globPattern
-	rl.pattern = pattern
+	rl.pattern = strfobj
 	rl.rotationTime = 24 * time.Hour
 	for _, opt := range options {
 		opt.Configure(&rl)
 	}
 
-	return &rl
+	return &rl, nil
 }
 
 func (rl *RotateLogs) genFilename() (string, error) {
 	now := rl.clock.Now()
 	diff := time.Duration(now.UnixNano()) % rl.rotationTime
 	t := now.Add(time.Duration(-1 * diff))
-	str, err := strftime.Format(rl.pattern, t)
+	str, err := rl.pattern.FormatString(t)
 	if err != nil {
 		return "", err
 	}

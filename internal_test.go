@@ -17,10 +17,14 @@ func TestGenFilename(t *testing.T) {
 	}
 
 	for _, xt := range ts {
-		rl := New(
+		rl, err := New(
 			"/path/to/%Y/%m/%d",
 			WithClock(clockwork.NewFakeClockAt(xt)),
 		)
+		if !assert.NoError(t, err, "New should succeed") {
+			return
+		}
+
 		defer rl.Close()
 
 		fn, err := rl.genFilename()
