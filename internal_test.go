@@ -27,11 +27,7 @@ func TestGenFilename(t *testing.T) {
 
 		defer rl.Close()
 
-		fn, err := rl.genFilename()
-		if !assert.NoError(t, err, "filename generation should succeed") {
-			return
-		}
-
+		fn := rl.genFilename()
 		expected := fmt.Sprintf("/path/to/%04d/%02d/%02d",
 			xt.Year(),
 			xt.Month(),

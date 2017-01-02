@@ -106,15 +106,11 @@ func New(pattern string, options ...Option) (*RotateLogs, error) {
 	return &rl, nil
 }
 
-func (rl *RotateLogs) genFilename() (string, error) {
+func (rl *RotateLogs) genFilename() string {
 	now := rl.clock.Now()
 	diff := time.Duration(now.UnixNano()) % rl.rotationTime
 	t := now.Add(time.Duration(-1 * diff))
-	str, err := rl.pattern.FormatString(t)
-	if err != nil {
-		return "", err
-	}
-	return str, err
+	return rl.pattern.FormatString(t)
 }
 
 // Write satisfies the io.Writer interface. It writes to the
@@ -128,11 +124,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
-
-	filename, err := rl.genFilename()
-	if err != nil {
-		return 0, err
-	}
+	filename := rl.genFilename()
 
 	var out *os.File
 	if filename == rl.curFn { // Match!
