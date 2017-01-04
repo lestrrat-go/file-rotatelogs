@@ -17,17 +17,17 @@ func TestGenFilename(t *testing.T) {
 	}
 
 	for _, xt := range ts {
-		rl := New(
+		rl, err := New(
 			"/path/to/%Y/%m/%d",
 			WithClock(clockwork.NewFakeClockAt(xt)),
 		)
-		defer rl.Close()
-
-		fn, err := rl.genFilename()
-		if !assert.NoError(t, err, "filename generation should succeed") {
+		if !assert.NoError(t, err, "New should succeed") {
 			return
 		}
 
+		defer rl.Close()
+
+		fn := rl.genFilename()
 		expected := fmt.Sprintf("/path/to/%04d/%02d/%02d",
 			xt.Year(),
 			xt.Month(),
