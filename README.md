@@ -135,7 +135,7 @@ Note: Remember to use time.Duration values.
   )
 ```
 
-## MaxAge (default: 0)
+## MaxAge (default: 7 days)
 
 Time to wait until old logs are purged. By default no logs are purged, which
 certainly isn't what you want.
