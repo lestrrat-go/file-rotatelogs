@@ -148,3 +148,18 @@ Note: Remember to use time.Duration values.
     rotatelogs.WithMaxAge(time.Hour),
   )
 ```
+
+## RotationCount (default: -1)
+
+The number of files should be kept. By default, this option is disabled.
+
+Note: MaxAge should be disabled by specifing `WithMaxAge(-1)` explicitly.
+
+```go
+  // Purge logs except latest 7 files
+  rotatelogs.New(
+    "/var/log/myapp/log.%Y%m%d",
+    rotatelogs.WithMaxAge(-1),
+    rotatelogs.WithRotationCount(7),
+  )
+```
