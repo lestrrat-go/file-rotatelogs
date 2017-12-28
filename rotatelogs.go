@@ -81,6 +81,16 @@ func WithRotationTime(d time.Duration) Option {
 	})
 }
 
+// WithRotationCount creates a new Option that sets the
+// number of files should be kept before it gets
+// purged from the file system.
+func WithRotationCount(n int) Option {
+	return OptionFn(func(rl *RotateLogs) error {
+		rl.rotationCount = n
+		return nil
+	})
+}
+
 // New creates a new RotateLogs object. A log filename pattern
 // must be passed. Optional `Option` parameters may be passed
 func New(pattern string, options ...Option) (*RotateLogs, error) {
@@ -99,7 +109,9 @@ func New(pattern string, options ...Option) (*RotateLogs, error) {
 	rl.globPattern = globPattern
 	rl.pattern = strfobj
 	rl.rotationTime = 24 * time.Hour
+	// Keeping forward compatibility, maxAge is prior to rotationCount.
 	rl.maxAge = 7 * 24 * time.Hour
+	rl.rotationCount = -1
 	for _, opt := range options {
 		opt.Configure(&rl)
 	}
@@ -234,8 +246,11 @@ func (rl *RotateLogs) rotate(filename string) error {
 		}
 	}
 
-	if rl.maxAge <= 0 {
-		return errors.New("maxAge not set, not rotating")
+	if rl.maxAge > 0 && rl.rotationCount > 0 {
+		return errors.New("either maxAge or rotationCount should be set, not rotating")
+	}
+	if rl.maxAge <= 0 && rl.rotationCount <= 0 {
+		return errors.New("neither maxAge nor rotationCount are not set, not rotating")
 	}
 
 	matches, err := filepath.Glob(rl.globPattern)
@@ -256,10 +271,28 @@ func (rl *RotateLogs) rotate(filename string) error {
 			continue
 		}
 
-		if fi.ModTime().After(cutoff) {
+		fl, err := os.Lstat(path)
+		if err != nil {
 			continue
 		}
+		if rl.maxAge > 0 {
+			if fi.ModTime().After(cutoff) {
+				continue
+			}
+		} else if rl.rotationCount > 0 {
+			if fl.Mode()&os.ModeSymlink == os.ModeSymlink {
+				continue
+			}
+		}
 		toUnlink = append(toUnlink, path)
+	}
+
+	if rl.rotationCount > 0 {
+		if rl.rotationCount >= len(toUnlink) {
+			toUnlink = make([]string, 0, 0)
+		} else {
+			toUnlink = toUnlink[:len(toUnlink)-rl.rotationCount]
+		}
 	}
 
 	if len(toUnlink) <= 0 {

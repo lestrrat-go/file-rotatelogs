@@ -125,6 +125,110 @@ func TestLogRotate(t *testing.T) {
 	}
 }
 
+func CreateRotationTestFile(dir string, base time.Time, d time.Duration, n int) {
+	timestamp := base
+	for i := 0; i < n; i++ {
+		// %Y%m%d%H%M%S
+		suffix := timestamp.Format("20060102150405")
+		path := filepath.Join(dir, "log"+suffix)
+		ioutil.WriteFile(path, []byte("rotation test file\n"), os.ModePerm)
+		os.Chtimes(path, timestamp, timestamp)
+		timestamp = timestamp.Add(d)
+	}
+}
+
+func TestLogRotationCount(t *testing.T) {
+	dir, err := ioutil.TempDir("", "file-rotatelogs-rotationcount-test")
+	if !assert.NoError(t, err, "creating temporary directory should succeed") {
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	dummyTime := time.Now().Add(-7 * 24 * time.Hour)
+	dummyTime = dummyTime.Add(time.Duration(-1 * dummyTime.Nanosecond()))
+	clock := clockwork.NewFakeClockAt(dummyTime)
+
+	t.Run("Either maxAge or rotationCount should be set", func(t *testing.T) {
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "log%Y%m%d%H%M%S"),
+			rotatelogs.WithClock(clock),
+			rotatelogs.WithMaxAge(-1),
+			rotatelogs.WithRotationCount(-1),
+		)
+		if !assert.NoError(t, err, `Both of maxAge and rotationCount is disabled`) {
+			return
+		}
+		defer rl.Close()
+	})
+
+	t.Run("Either maxAge or rotationCount should be set", func(t *testing.T) {
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "log%Y%m%d%H%M%S"),
+			rotatelogs.WithClock(clock),
+			rotatelogs.WithMaxAge(1),
+			rotatelogs.WithRotationCount(1),
+		)
+		if !assert.NoError(t, err, `Both of maxAge and rotationCount is enabled`) {
+			return
+		}
+		defer rl.Close()
+	})
+
+	t.Run("Only latest log file is kept", func(t *testing.T) {
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "log%Y%m%d%H%M%S"),
+			rotatelogs.WithClock(clock),
+			rotatelogs.WithMaxAge(-1),
+			rotatelogs.WithRotationCount(1),
+		)
+		if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+			return
+		}
+		defer rl.Close()
+
+		n, err := rl.Write([]byte("dummy"))
+		if !assert.NoError(t, err, "rl.Write should succeed") {
+			return
+		}
+		if !assert.Len(t, "dummy", n, "rl.Write should succeed") {
+			return
+		}
+		time.Sleep(time.Second)
+		files, err := filepath.Glob(filepath.Join(dir, "log*"))
+		if !assert.Equal(t, 1, len(files), "Only latest log is kept") {
+			return
+		}
+	})
+
+	t.Run("Old log files are purged except 2 log files", func(t *testing.T) {
+		CreateRotationTestFile(dir, dummyTime, time.Duration(time.Hour), 5)
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "log%Y%m%d%H%M%S"),
+			rotatelogs.WithClock(clock),
+			rotatelogs.WithMaxAge(-1),
+			rotatelogs.WithRotationCount(2),
+		)
+		if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+			return
+		}
+		defer rl.Close()
+
+		n, err := rl.Write([]byte("dummy"))
+		if !assert.NoError(t, err, "rl.Write should succeed") {
+			return
+		}
+		if !assert.Len(t, "dummy", n, "rl.Write should succeed") {
+			return
+		}
+		time.Sleep(time.Second)
+		files, err := filepath.Glob(filepath.Join(dir, "log*"))
+		if !assert.Equal(t, 2, len(files), "One file is kept") {
+			return
+		}
+	})
+
+}
+
 func TestLogSetOutput(t *testing.T) {
 	dir, err := ioutil.TempDir("", "file-rotatelogs-test")
 	if err != nil {
