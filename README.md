@@ -61,7 +61,7 @@ import(
 )
   
 func main() {
-  rl, _ := rotatelogs.NewRotateLogs("/path/to/access_log.%Y%m%d%H%M")
+  rl, _ := rotatelogs.New("/path/to/access_log.%Y%m%d%H%M")
 
   log.SetOutput(rl)
 
