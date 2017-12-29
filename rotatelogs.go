@@ -6,6 +6,7 @@ package rotatelogs
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -141,58 +142,43 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
+	out, err := rl.getTargetWriter()
+	if err != nil {
+		return 0, errors.Wrap(err, `failed to acquite target io.Writer`)
+	}
+
+	return out.Write(p)
+}
+
+// must be locked during this operation
+func (rl *RotateLogs) getTargetWriter() (io.Writer, error) {
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
 	filename := rl.genFilename()
-
-	var out *os.File
-	if filename == rl.curFn { // Match!
-		out = rl.outFh // use old one
+	if rl.curFn == filename {
+		// nothing to do
+		return rl.outFh, nil
 	}
 
-	var isNew bool
-
-	if out == nil {
-		isNew = true
-
-		_, err := os.Stat(filename)
-		if err == nil {
-			if rl.linkName != "" {
-				_, err = os.Lstat(rl.linkName)
-				if err == nil {
-					isNew = false
-				}
-			}
-		}
-
-		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if err != nil {
-			return 0, fmt.Errorf("error: Failed to open file %s: %s", rl.pattern, err)
-		}
-
-		out = fh
-		if isNew {
-			if err := rl.rotate(filename); err != nil {
-				// Failure to rotate is a problem, but it's really not a great
-				// idea to stop your application just because you couldn't rename
-				// your log. For now, we're just going to punt it and write to
-				// os.Stderr
-				fmt.Fprintf(os.Stderr, "failed to rotate: %s\n", err)
-			}
-		}
+	// if we got here, then we need to create a file
+	fh, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, errors.Errorf("failed to open file %s: %s", rl.pattern, err)
 	}
 
-	n, err = out.Write(p)
-
-	if rl.outFh == nil {
-		rl.outFh = out
-	} else if isNew {
-		rl.outFh.Close()
-		rl.outFh = out
+	if err := rl.rotate(filename); err != nil {
+		// Failure to rotate is a problem, but it's really not a great
+		// idea to stop your application just because you couldn't rename
+		// your log. For now, we're just going to punt it and write to
+		// os.Stderr
+		fmt.Fprintf(os.Stderr, "failed to rotate: %s\n", err)
 	}
+
+	rl.outFh.Close()
+	rl.outFh = fh
 	rl.curFn = filename
 
-	return n, err
+	return fh, nil
 }
 
 // CurrentFileName returns the current file name that
@@ -224,8 +210,7 @@ func (g *cleanupGuard) Run() {
 }
 
 func (rl *RotateLogs) rotate(filename string) error {
-	lockfn := fmt.Sprintf("%s_lock", filename)
-
+	lockfn := filename + `_lock`
 	fh, err := os.OpenFile(lockfn, os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		// Can't lock, just return
@@ -240,20 +225,18 @@ func (rl *RotateLogs) rotate(filename string) error {
 	defer guard.Run()
 
 	if rl.linkName != "" {
-		tmpLinkName := fmt.Sprintf("%s_symlink", filename)
-		err = os.Symlink(filename, tmpLinkName)
-		if err != nil {
-			return err
+		tmpLinkName := filename + `_symlink`
+		if err := os.Symlink(filename, tmpLinkName); err != nil {
+			return errors.Wrap(err, `failed to create new symlink`)
 		}
 
-		err = os.Rename(tmpLinkName, rl.linkName)
-		if err != nil {
-			return err
+		if err := os.Rename(tmpLinkName, rl.linkName); err != nil {
+			return errors.Wrap(err, `failed to rename new symlink`)
 		}
 	}
 
 	if rl.maxAge <= 0 && rl.rotationCount <= 0 {
-		return errors.New("neither maxAge nor rotationCount are not set, not rotating")
+		return errors.New("panic: maxAge and rotationCount are both set")
 	}
 
 	matches, err := filepath.Glob(rl.globPattern)
@@ -278,24 +261,24 @@ func (rl *RotateLogs) rotate(filename string) error {
 		if err != nil {
 			continue
 		}
-		if rl.maxAge > 0 {
-			if fi.ModTime().After(cutoff) {
-				continue
-			}
-		} else if rl.rotationCount > 0 {
-			if fl.Mode()&os.ModeSymlink == os.ModeSymlink {
-				continue
-			}
+
+		if rl.maxAge > 0 && fi.ModTime().After(cutoff) {
+			continue
+		}
+
+		if rl.rotationCount > 0 && fl.Mode()&os.ModeSymlink == os.ModeSymlink {
+			continue
 		}
 		toUnlink = append(toUnlink, path)
 	}
 
 	if rl.rotationCount > 0 {
+		// Only delete if we have more than rotationCount
 		if rl.rotationCount >= len(toUnlink) {
-			toUnlink = make([]string, 0, 0)
-		} else {
-			toUnlink = toUnlink[:len(toUnlink)-rl.rotationCount]
+			return nil
 		}
+
+		toUnlink = toUnlink[:len(toUnlink)-rl.rotationCount]
 	}
 
 	if len(toUnlink) <= 0 {
