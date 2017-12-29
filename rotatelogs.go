@@ -67,6 +67,9 @@ func WithLinkName(s string) Option {
 // the file system.
 func WithMaxAge(d time.Duration) Option {
 	return OptionFn(func(rl *RotateLogs) error {
+		if rl.rotationCount > 0 && d > 0 {
+			return errors.New("attempt to set MaxAge when RotationCount is also given")
+		}
 		rl.maxAge = d
 		return nil
 	})
@@ -86,6 +89,9 @@ func WithRotationTime(d time.Duration) Option {
 // purged from the file system.
 func WithRotationCount(n int) Option {
 	return OptionFn(func(rl *RotateLogs) error {
+		if rl.maxAge > 0 && n > 0 {
+			return errors.New("attempt to set RotationCount when MaxAge is also given")
+		}
 		rl.rotationCount = n
 		return nil
 	})
@@ -246,9 +252,6 @@ func (rl *RotateLogs) rotate(filename string) error {
 		}
 	}
 
-	if rl.maxAge > 0 && rl.rotationCount > 0 {
-		return errors.New("either maxAge or rotationCount should be set, not rotating")
-	}
 	if rl.maxAge <= 0 && rl.rotationCount <= 0 {
 		return errors.New("neither maxAge nor rotationCount are not set, not rotating")
 	}
