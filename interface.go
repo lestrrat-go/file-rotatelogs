@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	strftime "github.com/lestrrat/go-strftime"
+	strftime "github.com/lestrrat-go/strftime"
 )
 
 // RotateLogs represents a log file that gets

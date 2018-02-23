@@ -1,12 +1,12 @@
-go-file-rotatelogs
+file-rotatelogs
 ==================
 
-[![Build Status](https://travis-ci.org/lestrrat/go-file-rotatelogs.png?branch=master)](https://travis-ci.org/lestrrat/go-file-rotatelogs)
+Periodically rotates log files from within the application. Port of [File::RotateLogs](https://metacpan.org/release/File-RotateLogs) from Perl to Go.
 
-[![GoDoc](https://godoc.org/github.com/lestrrat/go-file-rotatelogs?status.svg)](https://godoc.org/github.com/lestrrat/go-file-rotatelogs)
+[![Build Status](https://travis-ci.org/lestrrat-go/file-rotatelogs.png?branch=master)](https://travis-ci.org/lestrrat-go/file-rotatelogs)
 
+[![GoDoc](https://godoc.org/github.com/lestrrat-go/file-rotatelogs?status.svg)](https://godoc.org/github.com/lestrrat-go/file-rotatelogs)
 
-Port of [File::RotateLogs](https://metacpan.org/release/File-RotateLogs) from Perl to Go.
 
 # SYNOPSIS
 
@@ -15,8 +15,8 @@ import (
   "log"
   "net/http"
 
-  apachelog "github.com/lestrrat/go-apache-logformat"
-  rotatelogs "github.com/lestrrat/go-file-rotatelogs"
+  apachelog "github.com/lestrrat-go/apache-logformat"
+  rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 )
 
 func main() {
@@ -47,17 +47,17 @@ to setup logrotate!
 To install, simply issue a `go get`:
 
 ```
-go get github.com/lestrrat/go-file-rotatelogs
+go get github.com/lestrrat-go/file-rotatelogs
 ```
 
 It's normally expected that this library is used with some other
 logging service, such as the built-in `log` library, or loggers
-such as `github.com/lestrrat/go-apache-logformat`.
+such as `github.com/lestrrat-go/apache-logformat`.
 
 ```go
 import(
   "log"
-  "github.com/lestrrat/go-file-rotatelogs"
+  "github.com/lestrrat-go/file-rotatelogs"
 )
   
 func main() {
