@@ -153,8 +153,8 @@ func TestLogRotationCount(t *testing.T) {
 		rl, err := rotatelogs.New(
 			filepath.Join(dir, "log%Y%m%d%H%M%S"),
 			rotatelogs.WithClock(clock),
-			rotatelogs.WithMaxAge(-1),
-			rotatelogs.WithRotationCount(-1),
+			rotatelogs.WithMaxAge(time.Duration(0)),
+			rotatelogs.WithRotationCount(0),
 		)
 		if !assert.NoError(t, err, `Both of maxAge and rotationCount is disabled`) {
 			return
@@ -169,10 +169,12 @@ func TestLogRotationCount(t *testing.T) {
 			rotatelogs.WithMaxAge(1),
 			rotatelogs.WithRotationCount(1),
 		)
-		if !assert.NoError(t, err, `Both of maxAge and rotationCount is enabled`) {
+		if !assert.Error(t, err, `Both of maxAge and rotationCount is enabled`) {
 			return
 		}
-		defer rl.Close()
+		if rl != nil {
+			defer rl.Close()
+		}
 	})
 
 	t.Run("Only latest log file is kept", func(t *testing.T) {
@@ -272,8 +274,8 @@ func TestGHIssue16(t *testing.T) {
 	}()
 
 	dir, err := ioutil.TempDir("", "file-rotatelogs-gh16")
-	if err != nil {
-		t.Errorf("Failed to create temporary directory: %s", err)
+	if !assert.NoError(t, err, `creating temporary directory should succeed`) {
+		return
 	}
 	defer os.RemoveAll(dir)
 

@@ -39,13 +39,3 @@ func TestGenFilename(t *testing.T) {
 		}
 	}
 }
-
-func TestWithLocation(t *testing.T) {
-	// Not really a test, but well...
-	loc, _ := time.LoadLocation("Asia/Tokyo")
-	opt := WithLocation(loc)
-	var rl RotateLogs
-	opt.Configure(&rl)
-	t.Logf("%s", rl.clock.Now())
-}
-
