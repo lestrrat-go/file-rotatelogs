@@ -12,6 +12,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -261,4 +262,34 @@ func TestLogSetOutput(t *testing.T) {
 	if !strings.Contains(string(content), str) {
 		t.Errorf(`File content does not contain "%s" (was "%s")`, str, content)
 	}
+}
+
+func TestGHIssue16(t *testing.T) {
+	defer func() {
+		if v := recover(); v != nil {
+			assert.NoError(t, errors.Errorf("%s", v), "error should be nil")
+		}
+	}()
+
+	dir, err := ioutil.TempDir("", "file-rotatelogs-gh16")
+	if err != nil {
+		t.Errorf("Failed to create temporary directory: %s", err)
+	}
+	defer os.RemoveAll(dir)
+
+	rl, err := rotatelogs.New(
+		filepath.Join(dir, "log%Y%m%d%H%M%S"),
+		rotatelogs.WithLinkName("./test.log"),
+		rotatelogs.WithRotationTime(10*time.Second),
+		rotatelogs.WithRotationCount(3),
+		rotatelogs.WithMaxAge(-1),
+	)
+	if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+		return
+	}
+
+	if !assert.NoError(t, rl.Rotate(), "rl.Rotate should succeed") {
+		return
+	}
+	defer rl.Close()
 }

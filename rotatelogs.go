@@ -142,7 +142,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
-	out, err := rl.getTargetWriter()
+	out, err := rl.getWriter_nolock(false)
 	if err != nil {
 		return 0, errors.Wrap(err, `failed to acquite target io.Writer`)
 	}
@@ -151,7 +151,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 }
 
 // must be locked during this operation
-func (rl *RotateLogs) getTargetWriter() (io.Writer, error) {
+func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail bool) (io.Writer, error) {
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
 	filename := rl.genFilename()
@@ -166,12 +166,16 @@ func (rl *RotateLogs) getTargetWriter() (io.Writer, error) {
 		return nil, errors.Errorf("failed to open file %s: %s", rl.pattern, err)
 	}
 
-	if err := rl.rotate(filename); err != nil {
-		// Failure to rotate is a problem, but it's really not a great
-		// idea to stop your application just because you couldn't rename
-		// your log. For now, we're just going to punt it and write to
-		// os.Stderr
-		fmt.Fprintf(os.Stderr, "failed to rotate: %s\n", err)
+	if err := rl.rotate_nolock(filename); err != nil {
+		err = errors.Wrap(err, "failed to rotate")
+		if bailOnRotateFail {
+			// Failure to rotate is a problem, but it's really not a great
+			// idea to stop your application just because you couldn't rename
+			// your log. 
+			// We only return this error when explicitly needed.
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 	}
 
 	rl.outFh.Close()
@@ -209,7 +213,17 @@ func (g *cleanupGuard) Run() {
 	g.fn()
 }
 
-func (rl *RotateLogs) rotate(filename string) error {
+// Rotate forcefully rotates the log files.
+func (rl *RotateLogs) Rotate() error {
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+	if _, err := rl.getWriter_nolock(true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rl *RotateLogs) rotate_nolock(filename string) error {
 	lockfn := filename + `_lock`
 	fh, err := os.OpenFile(lockfn, os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
