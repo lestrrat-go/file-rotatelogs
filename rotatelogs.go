@@ -22,108 +22,64 @@ func (c clockFn) Now() time.Time {
 	return c()
 }
 
-func (o OptionFn) Configure(rl *RotateLogs) error {
-	return o(rl)
-}
-
-// WithClock creates a new Option that sets a clock
-// that the RotateLogs object will use to determine
-// the current time.
-//
-// By default rotatelogs.Local, which returns the
-// current time in the local time zone, is used. If you
-// would rather use UTC, use rotatelogs.UTC as the argument
-// to this option, and pass it to the constructor.
-func WithClock(c Clock) Option {
-	return OptionFn(func(rl *RotateLogs) error {
-		rl.clock = c
-		return nil
-	})
-}
-
-// WithLocation creates a new Option that sets up a
-// "Clock" interface that the RotateLogs object will use
-// to determine the current time.
-//
-// This optin works by always returning the in the given
-// location.
-func WithLocation(loc *time.Location) Option {
-	return WithClock(clockFn(func() time.Time {
-		return time.Now().In(loc)
-	}))
-}
-
-// WithLinkName creates a new Option that sets the
-// symbolic link name that gets linked to the current
-// file name being used.
-func WithLinkName(s string) Option {
-	return OptionFn(func(rl *RotateLogs) error {
-		rl.linkName = s
-		return nil
-	})
-}
-
-// WithMaxAge creates a new Option that sets the
-// max age of a log file before it gets purged from
-// the file system.
-func WithMaxAge(d time.Duration) Option {
-	return OptionFn(func(rl *RotateLogs) error {
-		if rl.rotationCount > 0 && d > 0 {
-			return errors.New("attempt to set MaxAge when RotationCount is also given")
-		}
-		rl.maxAge = d
-		return nil
-	})
-}
-
-// WithRotationTime creates a new Option that sets the
-// time between rotation.
-func WithRotationTime(d time.Duration) Option {
-	return OptionFn(func(rl *RotateLogs) error {
-		rl.rotationTime = d
-		return nil
-	})
-}
-
-// WithRotationCount creates a new Option that sets the
-// number of files should be kept before it gets
-// purged from the file system.
-func WithRotationCount(n int) Option {
-	return OptionFn(func(rl *RotateLogs) error {
-		if rl.maxAge > 0 && n > 0 {
-			return errors.New("attempt to set RotationCount when MaxAge is also given")
-		}
-		rl.rotationCount = n
-		return nil
-	})
-}
-
 // New creates a new RotateLogs object. A log filename pattern
 // must be passed. Optional `Option` parameters may be passed
-func New(pattern string, options ...Option) (*RotateLogs, error) {
-	globPattern := pattern
+func New(p string, options ...Option) (*RotateLogs, error) {
+	globPattern := p
 	for _, re := range patternConversionRegexps {
 		globPattern = re.ReplaceAllString(globPattern, "*")
 	}
 
-	strfobj, err := strftime.New(pattern)
+	pattern, err := strftime.New(p)
 	if err != nil {
 		return nil, errors.Wrap(err, `invalid strftime pattern`)
 	}
 
-	var rl RotateLogs
-	rl.clock = Local
-	rl.globPattern = globPattern
-	rl.pattern = strfobj
-	rl.rotationTime = 24 * time.Hour
-	// Keeping forward compatibility, maxAge is prior to rotationCount.
-	rl.maxAge = 7 * 24 * time.Hour
-	rl.rotationCount = -1
-	for _, opt := range options {
-		opt.Configure(&rl)
+	var clock Clock = Local
+	rotationTime := 24 * time.Hour
+	var rotationCount uint
+	var linkName string
+	var maxAge time.Duration
+
+	for _, o := range options {
+		switch o.Name() {
+		case optkeyClock:
+			clock = o.Value().(Clock)
+		case optkeyLinkName:
+			linkName = o.Value().(string)
+		case optkeyMaxAge:
+			maxAge = o.Value().(time.Duration)
+			if maxAge < 0 {
+				maxAge = 0
+			}
+		case optkeyRotationTime:
+			rotationTime = o.Value().(time.Duration)
+			if rotationTime < 0 {
+				rotationTime = 0
+			}
+		case optkeyRotationCount:
+			rotationCount = o.Value().(uint)
+		}
 	}
 
-	return &rl, nil
+	if maxAge > 0 && rotationCount > 0 {
+		return nil, errors.New("options MaxAge and RotationCount cannot be both set")
+	}
+
+	if maxAge == 0 && rotationCount == 0 {
+		// if both are 0, give maxAge a sane default
+		maxAge = 7 * 24 * time.Hour
+	}
+
+	return &RotateLogs{
+		clock:         clock,
+		globPattern:   globPattern,
+		linkName:      linkName,
+		maxAge:        maxAge,
+		pattern:       pattern,
+		rotationTime:  rotationTime,
+		rotationCount: rotationCount,
+	}, nil
 }
 
 func (rl *RotateLogs) genFilename() string {
@@ -142,7 +98,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
-	out, err := rl.getTargetWriter()
+	out, err := rl.getWriter_nolock(false)
 	if err != nil {
 		return 0, errors.Wrap(err, `failed to acquite target io.Writer`)
 	}
@@ -151,7 +107,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 }
 
 // must be locked during this operation
-func (rl *RotateLogs) getTargetWriter() (io.Writer, error) {
+func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail bool) (io.Writer, error) {
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
 	filename := rl.genFilename()
@@ -166,12 +122,16 @@ func (rl *RotateLogs) getTargetWriter() (io.Writer, error) {
 		return nil, errors.Errorf("failed to open file %s: %s", rl.pattern, err)
 	}
 
-	if err := rl.rotate(filename); err != nil {
-		// Failure to rotate is a problem, but it's really not a great
-		// idea to stop your application just because you couldn't rename
-		// your log. For now, we're just going to punt it and write to
-		// os.Stderr
-		fmt.Fprintf(os.Stderr, "failed to rotate: %s\n", err)
+	if err := rl.rotate_nolock(filename); err != nil {
+		err = errors.Wrap(err, "failed to rotate")
+		if bailOnRotateFail {
+			// Failure to rotate is a problem, but it's really not a great
+			// idea to stop your application just because you couldn't rename
+			// your log.
+			// We only return this error when explicitly needed.
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 	}
 
 	rl.outFh.Close()
@@ -209,7 +169,17 @@ func (g *cleanupGuard) Run() {
 	g.fn()
 }
 
-func (rl *RotateLogs) rotate(filename string) error {
+// Rotate forcefully rotates the log files.
+func (rl *RotateLogs) Rotate() error {
+	rl.mutex.Lock()
+	defer rl.mutex.Unlock()
+	if _, err := rl.getWriter_nolock(true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rl *RotateLogs) rotate_nolock(filename string) error {
 	lockfn := filename + `_lock`
 	fh, err := os.OpenFile(lockfn, os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -274,11 +244,11 @@ func (rl *RotateLogs) rotate(filename string) error {
 
 	if rl.rotationCount > 0 {
 		// Only delete if we have more than rotationCount
-		if rl.rotationCount >= len(toUnlink) {
+		if rl.rotationCount >= uint(len(toUnlink)) {
 			return nil
 		}
 
-		toUnlink = toUnlink[:len(toUnlink)-rl.rotationCount]
+		toUnlink = toUnlink[:len(toUnlink)-int(rl.rotationCount)]
 	}
 
 	if len(toUnlink) <= 0 {

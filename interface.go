@@ -20,7 +20,7 @@ type RotateLogs struct {
 	outFh         *os.File
 	pattern       *strftime.Strftime
 	rotationTime  time.Duration
-	rotationCount int
+	rotationCount uint
 }
 
 // Clock is the interface used by the RotateLogs
@@ -41,9 +41,6 @@ var Local = clockFn(time.Now)
 // Option is used to pass optional arguments to
 // the RotateLogs constructor
 type Option interface {
-	Configure(*RotateLogs) error
+	Name() string
+	Value() interface {}
 }
-
-// OptionFn is a type of Option that is represented
-// by a single function that gets called for Configure()
-type OptionFn func(*RotateLogs) error
