@@ -112,8 +112,12 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail bool) (io.Writer, error)
 	// to log to, which may be newer than rl.currentFilename
 	filename := rl.genFilename()
 	if rl.curFn == filename {
-		// nothing to do
-		return rl.outFh, nil
+		//Increase the judgment file to exist
+		_, err := os.Stat(filename)
+		if err == nil {
+			// nothing to do
+			return rl.outFh, nil
+		}
 	}
 
 	// if we got here, then we need to create a file
