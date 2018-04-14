@@ -295,3 +295,66 @@ func TestGHIssue16(t *testing.T) {
 	}
 	defer rl.Close()
 }
+
+func TestRotationGenerationalNames(t *testing.T) {
+	dir, err := ioutil.TempDir("", "file-rotatelogs-generational")
+	if !assert.NoError(t, err, `creating temporary directory should succeed`) {
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	t.Run("Rotate over unchanged pattern", func(t *testing.T) {
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "unchaged-pattern.log"),
+		)
+		if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+			return
+		}
+
+		seen := map[string]struct{}{}
+		for i := 0; i < 10; i++ {
+			rl.Write([]byte("Hello, World!"))
+			if !assert.NoError(t, rl.Rotate(), "rl.Rotate should succeed") {
+				return
+			}
+
+			// Because every call to Rotate should yield a new log file,
+			// and the previous files already exist, the filenames should share
+			// the same prefix and have a unique suffix
+			fn := filepath.Base(rl.CurrentFileName())
+			if !assert.True(t, strings.HasPrefix(fn, "unchaged-pattern.log"), "prefix for all filenames should match") {
+				return
+			}
+			suffix := strings.TrimPrefix(fn, "unchanged-pattern.log")
+			if _, ok := seen[suffix]; !assert.False(t, ok, `filename suffix %s should be unique`, suffix) {
+				return
+			}
+			seen[suffix] = struct{}{}
+		}
+		defer rl.Close()
+	})
+	t.Run("Rotate over pattern change over every second", func(t *testing.T) {
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "every-second-pattern-%Y%m%d%H%M%S.log"),
+			rotatelogs.WithRotationTime(time.Nanosecond),
+		)
+		if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+			return
+		}
+
+		for i := 0; i < 10; i++ {
+			time.Sleep(time.Second)
+			rl.Write([]byte("Hello, World!"))
+			if !assert.NoError(t, rl.Rotate(), "rl.Rotate should succeed") {
+				return
+			}
+
+			// because every new Write should yield a new logfile,
+			// every rorate should be create a filename ending with a .1
+			if !assert.True(t, strings.HasSuffix(rl.CurrentFileName(), ".1"), "log name should end with .1") {
+				return
+			}
+		}
+		defer rl.Close()
+	})
+}

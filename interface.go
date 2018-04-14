@@ -14,6 +14,7 @@ type RotateLogs struct {
 	clock         Clock
 	curFn         string
 	globPattern   string
+	generation    int
 	linkName      string
 	maxAge        time.Duration
 	mutex         sync.RWMutex
