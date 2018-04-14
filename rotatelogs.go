@@ -98,7 +98,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
-	out, err := rl.getWriter_nolock(false)
+	out, err := rl.getWriter_nolock(false, false)
 	if err != nil {
 		return 0, errors.Wrap(err, `failed to acquite target io.Writer`)
 	}
@@ -107,13 +107,31 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 }
 
 // must be locked during this operation
-func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail bool) (io.Writer, error) {
+func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
+	generation := rl.generation
+
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
 	filename := rl.genFilename()
-	if rl.curFn == filename {
-		// nothing to do
-		return rl.outFh, nil
+	if rl.curFn != filename {
+		generation = 0
+	} else {
+		if !useGenerationalNames {
+			// nothing to do
+			return rl.outFh, nil
+		}
+		// This is used when we *REALLY* want to rotate a log.
+		// instead of just using the regular strftime pattern, we
+		// create a new file name using generational names such as
+		// "foo.1", "foo.2", "foo.3", etc
+		for {
+			generation++
+			name := fmt.Sprintf("%s.%d", filename, generation)
+			if _, err := os.Stat(name); err != nil {
+				filename = name
+				break
+			}
+		}
 	}
 
 	// if we got here, then we need to create a file
@@ -137,6 +155,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail bool) (io.Writer, error)
 	rl.outFh.Close()
 	rl.outFh = fh
 	rl.curFn = filename
+	rl.generation = generation
 
 	return fh, nil
 }
@@ -169,11 +188,17 @@ func (g *cleanupGuard) Run() {
 	g.fn()
 }
 
-// Rotate forcefully rotates the log files.
+// Rotate forcefully rotates the log files. If the generated file name
+// clash because file already exists, a numeric suffix of the form
+// ".1", ".2", ".3" and so forth are appended to the end of the log file
+//
+// Thie method can be used in conjunction with a signal handler so to
+// emulate servers that generate new log files when they receive a
+// SIGHUP
 func (rl *RotateLogs) Rotate() error {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
-	if _, err := rl.getWriter_nolock(true); err != nil {
+	if _, err := rl.getWriter_nolock(true, true); err != nil {
 		return err
 	}
 	return nil

@@ -163,3 +163,28 @@ Note: MaxAge should be disabled by specifing `WithMaxAge(-1)` explicitly.
     rotatelogs.WithRotationCount(7),
   )
 ```
+
+# Rotating files forcefully
+
+If you want to rotate files forcefully before the actual rotation time has reached,
+you may use the `Rotate()` method. This method forcefully rotates the logs, but
+if the generated file name clashes, then a numeric suffix is added so that
+the new file will forcefully appear on disk.
+
+For example, suppose you had a pattern of '%Y.log' with a rotation time of
+`86400` so that it only gets rotated every year, but for whatever reason you
+wanted to rotate the logs now, you could install a signal handler to
+trigger this rotation:
+
+```go
+rl := rotatelogs.New(...)
+
+signal.Notify(ch, syscall.SIGHUP)
+
+go func(ch chan os.Signal) {
+  <-ch
+  rl.Rotate()
+}()
+```
+
+And you will get a log file name in like `2018.log.1`, `2018.log.2`, etc.
