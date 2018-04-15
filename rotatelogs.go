@@ -220,13 +220,43 @@ func (rl *RotateLogs) rotate_nolock(filename string) error {
 	defer guard.Run()
 
 	if rl.linkName != "" {
-		tmpLinkName := filename + `_symlink`
-		if err := os.Symlink(filename, tmpLinkName); err != nil {
-			return errors.Wrap(err, `failed to create new symlink`)
+		var curPath, relPath, dstPath, dstLink, srcLink string
+		needChdir := false
+		// process relative and absolute path.
+		// change to the dest path and mkir symlink
+		// assume that: the link file at the same path to real log file
+		if relPath = filepath.Dir(filename); relPath != "" {
+			if curPath, err = os.Getwd(); err != nil {
+				return errors.Wrap(err, `failed to GetWd()`)
+			}
+			needChdir = true
+			if filepath.IsAbs(relPath) {
+				dstPath = relPath
+			} else {
+				dstPath = curPath + "/" + relPath
+			}
+			dstLink = filepath.Base(rl.linkName)
+			srcLink = filepath.Base(filename)
+			// fmt.Printf("cur:%s, rel:%s, dstPath:%s, dstLink:%s, srcLink:%s\n",
+			// curPath, relPath, dstPath, dstLink, srcLink)
+			if err = os.Chdir(dstPath); err != nil {
+				return errors.Wrap(err, `failed to Chdir()\n`)
+			}
 		}
 
-		if err := os.Rename(tmpLinkName, rl.linkName); err != nil {
-			return errors.Wrap(err, `failed to rename new symlink`)
+		tmpLinkName := srcLink + `_symlink`
+		// fmt.Printf("\nrotate: srcLink:%+v, tmpLinkName:%+v\n", srcLink, tmpLinkName)
+		if err := os.Symlink(srcLink, tmpLinkName); err != nil {
+			return errors.Wrap(err, `failed to create new symlink\n`)
+		}
+		if err := os.Rename(tmpLinkName, dstLink); err != nil {
+			return errors.Wrap(err, `failed to rename new symlink\n`)
+		}
+
+		if needChdir {
+			if err := os.Chdir(curPath); err != nil {
+				return errors.Wrap(err, `failed to Chdir() back\n`)
+			}
 		}
 	}
 
