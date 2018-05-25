@@ -84,8 +84,9 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 
 func (rl *RotateLogs) genFilename() string {
 	now := rl.clock.Now()
-	diff := time.Duration(now.UnixNano()) % rl.rotationTime
-	t := now.Add(time.Duration(-1 * diff))
+	_, offset := now.Zone()
+	base := now.Truncate(rl.rotationTime).Add(-1 * time.Duration(offset) * time.Second)
+	t := now.Add(base.Sub(now))
 	return rl.pattern.FormatString(t)
 }
 

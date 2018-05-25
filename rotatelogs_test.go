@@ -12,6 +12,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+	"github.com/lestrrat-go/strftime"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -356,5 +357,48 @@ func TestRotationGenerationalNames(t *testing.T) {
 			}
 		}
 		defer rl.Close()
+	})
+}
+
+func TestGHIssue23(t *testing.T) {
+	dir, err := ioutil.TempDir("", "file-rotatelogs-generational")
+	if !assert.NoError(t, err, `creating temporary directory should succeed`) {
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	t.Run("Set location to Asia/Tokyo", func(t *testing.T) {
+		loc, _ := time.LoadLocation("Asia/Tokyo")
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "asia_tokyo.%Y%m%d%H%M.log"),
+			rotatelogs.WithLocation(loc),
+		)
+		if !assert.NoError(t, err, "rotatelogs.New should succeed") {
+			return
+		}
+
+		// Timing sensitive...
+
+		var now time.Time
+		for {
+			now = time.Now().In(loc)
+			if now.Hour() == 23 && now.Minute() >= 59 {
+				t.Logf("This test is sensitive to date changes. don't run this test after 23:59 Asia/Tokyo time")
+				time.Sleep(time.Minute)
+				continue
+			}
+			break
+		}
+		dt := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+		expected, err := strftime.Format("asia_tokyo.%Y%m%d%H%M.log",dt)
+		if !assert.NoError(t, err, "strftime.Format should succeed") {
+			return
+		}
+		expected = filepath.Join(dir, expected)
+
+		rl.Rotate()
+		if !assert.Equal(t, expected, rl.CurrentFileName(), "file names should match") {
+			return
+		}
 	})
 }
