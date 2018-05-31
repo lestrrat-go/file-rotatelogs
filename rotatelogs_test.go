@@ -1,6 +1,7 @@
 package rotatelogs_test
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
-	"github.com/lestrrat-go/strftime"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -360,6 +360,12 @@ func TestRotationGenerationalNames(t *testing.T) {
 	})
 }
 
+type ClockFunc func() time.Time
+
+func (f ClockFunc) Now() time.Time {
+	return f()
+}
+
 func TestGHIssue23(t *testing.T) {
 	dir, err := ioutil.TempDir("", "file-rotatelogs-generational")
 	if !assert.NoError(t, err, `creating temporary directory should succeed`) {
@@ -367,38 +373,42 @@ func TestGHIssue23(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	t.Run("Set location to Asia/Tokyo", func(t *testing.T) {
-		loc, _ := time.LoadLocation("Asia/Tokyo")
-		rl, err := rotatelogs.New(
-			filepath.Join(dir, "asia_tokyo.%Y%m%d%H%M.log"),
-			rotatelogs.WithLocation(loc),
-		)
-		if !assert.NoError(t, err, "rotatelogs.New should succeed") {
-			return
+	for _, locName := range []string{"Asia/Tokyo", "Pacific/Honolulu"} {
+		loc, _ := time.LoadLocation(locName)
+		tests := []struct {
+			Expected string
+			Clock    rotatelogs.Clock
+		}{
+			{
+				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".201806010000.log"),
+				Clock: ClockFunc(func() time.Time {
+					return time.Date(2018, 6, 1, 3, 18, 0, 0, loc)
+				}),
+			},
+			{
+				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".201712310000.log"),
+				Clock: ClockFunc(func() time.Time {
+					return time.Date(2017, 12, 31, 23, 52, 0, 0, loc)
+				}),
+			},
 		}
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("location = %s, time = %s", locName, test.Clock.Now().Format(time.RFC3339)), func(t *testing.T) {
+				template := strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".%Y%m%d%H%M.log"
+				rl, err := rotatelogs.New(
+					filepath.Join(dir, template),
+					rotatelogs.WithClock(test.Clock), // we're not using WithLocation, but it's the same thing
+				)
+				if !assert.NoError(t, err, "rotatelogs.New should succeed") {
+					return
+				}
 
-		// Timing sensitive...
-
-		var now time.Time
-		for {
-			now = time.Now().In(loc)
-			if now.Hour() == 23 && now.Minute() >= 59 {
-				t.Logf("This test is sensitive to date changes. don't run this test after 23:59 Asia/Tokyo time")
-				time.Sleep(time.Minute)
-				continue
-			}
-			break
+				t.Logf("expected %s", test.Expected)
+				rl.Rotate()
+				if !assert.Equal(t, test.Expected, rl.CurrentFileName(), "file names should match") {
+					return
+				}
+			})
 		}
-		dt := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-		expected, err := strftime.Format("asia_tokyo.%Y%m%d%H%M.log",dt)
-		if !assert.NoError(t, err, "strftime.Format should succeed") {
-			return
-		}
-		expected = filepath.Join(dir, expected)
-
-		rl.Rotate()
-		if !assert.Equal(t, expected, rl.CurrentFileName(), "file names should match") {
-			return
-		}
-	})
+	}
 }

@@ -84,10 +84,26 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 
 func (rl *RotateLogs) genFilename() string {
 	now := rl.clock.Now()
-	_, offset := now.Zone()
-	base := now.Truncate(rl.rotationTime).Add(-1 * time.Duration(offset) * time.Second)
-	t := now.Add(base.Sub(now))
-	return rl.pattern.FormatString(t)
+
+	// XXX HACK: Truncate only happens in UTC semantics, apparently.
+	// observed values for truncating given time with 86400 secs:
+	//
+	// before truncation: 2018/06/01 03:54:54 2018-06-01T03:18:00+09:00
+	// after  truncation: 2018/06/01 03:54:54 2018-05-31T09:00:00+09:00
+	//
+	// This is really annoying when we want to truncate in local time
+	// so we hack: we take the apparent local time in the local zone,
+	// and pretend that it's in UTC. do our math, and put it back to
+	// the local zone
+	var base time.Time
+	if now.Location() != time.UTC {
+		base = time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), time.UTC)
+		base = base.Truncate(time.Duration(rl.rotationTime))
+		base = time.Date(base.Year(), base.Month(), base.Day(), base.Hour(), base.Minute(), base.Second(), base.Nanosecond(), base.Location())
+	} else {
+		base = now.Truncate(time.Duration(rl.rotationTime))
+	}
+	return rl.pattern.FormatString(base)
 }
 
 // Write satisfies the io.Writer interface. It writes to the
