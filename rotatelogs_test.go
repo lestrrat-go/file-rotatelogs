@@ -1,6 +1,7 @@
 package rotatelogs_test
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -357,4 +358,57 @@ func TestRotationGenerationalNames(t *testing.T) {
 		}
 		defer rl.Close()
 	})
+}
+
+type ClockFunc func() time.Time
+
+func (f ClockFunc) Now() time.Time {
+	return f()
+}
+
+func TestGHIssue23(t *testing.T) {
+	dir, err := ioutil.TempDir("", "file-rotatelogs-generational")
+	if !assert.NoError(t, err, `creating temporary directory should succeed`) {
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	for _, locName := range []string{"Asia/Tokyo", "Pacific/Honolulu"} {
+		loc, _ := time.LoadLocation(locName)
+		tests := []struct {
+			Expected string
+			Clock    rotatelogs.Clock
+		}{
+			{
+				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".201806010000.log"),
+				Clock: ClockFunc(func() time.Time {
+					return time.Date(2018, 6, 1, 3, 18, 0, 0, loc)
+				}),
+			},
+			{
+				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".201712310000.log"),
+				Clock: ClockFunc(func() time.Time {
+					return time.Date(2017, 12, 31, 23, 52, 0, 0, loc)
+				}),
+			},
+		}
+		for _, test := range tests {
+			t.Run(fmt.Sprintf("location = %s, time = %s", locName, test.Clock.Now().Format(time.RFC3339)), func(t *testing.T) {
+				template := strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".%Y%m%d%H%M.log"
+				rl, err := rotatelogs.New(
+					filepath.Join(dir, template),
+					rotatelogs.WithClock(test.Clock), // we're not using WithLocation, but it's the same thing
+				)
+				if !assert.NoError(t, err, "rotatelogs.New should succeed") {
+					return
+				}
+
+				t.Logf("expected %s", test.Expected)
+				rl.Rotate()
+				if !assert.Equal(t, test.Expected, rl.CurrentFileName(), "file names should match") {
+					return
+				}
+			})
+		}
+	}
 }
