@@ -40,6 +40,7 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 	var rotationCount uint
 	var linkName string
 	var maxAge time.Duration
+	var handler Handler
 
 	for _, o := range options {
 		switch o.Name() {
@@ -59,6 +60,8 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 			}
 		case optkeyRotationCount:
 			rotationCount = o.Value().(uint)
+		case optkeyHandler:
+			handler = o.Value().(Handler)
 		}
 	}
 
@@ -73,6 +76,7 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 
 	return &RotateLogs{
 		clock:         clock,
+		eventHandler:  handler,
 		globPattern:   globPattern,
 		linkName:      linkName,
 		maxAge:        maxAge,
@@ -126,11 +130,11 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 // must be locked during this operation
 func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
 	generation := rl.generation
-
+	previousFn := rl.curFn
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
 	filename := rl.genFilename()
-	if rl.curFn != filename {
+	if previousFn != filename {
 		generation = 0
 	} else {
 		if !useGenerationalNames {
@@ -174,6 +178,12 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 	rl.curFn = filename
 	rl.generation = generation
 
+	if h := rl.eventHandler; h != nil {
+		go h.Handle(&FileRotatedEvent{
+			prev:    previousFn,
+			current: filename,
+		})
+	}
 	return fh, nil
 }
 

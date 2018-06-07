@@ -164,6 +164,25 @@ Note: MaxAge should be disabled by specifing `WithMaxAge(-1)` explicitly.
   )
 ```
 
+## Handler (default: nil)
+
+Sets the event handler to receive event notifications from the RotateLogs
+object. Currently only supported event type is FiledRotated
+
+```go
+  rotatelogs.New(
+    "/var/log/myapp/log.%Y%m%d",
+    rotatelogs.Handler(rotatelogs.HandlerFunc(func(e Event) {
+      if e.Type() != rotatelogs.FileRotatedEventType {
+        return
+      }
+
+      // Do what you want with the data. This is just an idea:
+      storeLogFileToRemoteStorage(e.(*FileRotatedEvent).PreviousFile())
+    })),
+  )
+```
+
 # Rotating files forcefully
 
 If you want to rotate files forcefully before the actual rotation time has reached,

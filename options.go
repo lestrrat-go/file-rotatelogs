@@ -8,6 +8,7 @@ import (
 
 const (
 	optkeyClock         = "clock"
+	optkeyHandler       = "handler"
 	optkeyLinkName      = "link-name"
 	optkeyMaxAge        = "max-age"
 	optkeyRotationTime  = "rotation-time"
@@ -63,4 +64,11 @@ func WithRotationTime(d time.Duration) Option {
 // purged from the file system.
 func WithRotationCount(n uint) Option {
 	return option.New(optkeyRotationCount, n)
+}
+
+// WithHandler creates a new Option that specifies the
+// Handler object that gets invoked when an event occurs.
+// Currently `FileRotated` event is supported
+func WithHandler(h Handler) Option {
+	return option.New(optkeyHandler, h)
 }

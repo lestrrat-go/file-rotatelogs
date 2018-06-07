@@ -8,6 +8,28 @@ import (
 	strftime "github.com/lestrrat-go/strftime"
 )
 
+type Handler interface {
+	Handle(Event)
+}
+
+type HandlerFunc func(Event)
+
+type Event interface {
+	Type() EventType
+}
+
+type EventType int
+
+const (
+	InvalidEventType EventType = iota
+	FileRotatedEventType
+)
+
+type FileRotatedEvent struct {
+	prev    string // previous filename
+	current string // current, new filename
+}
+
 // RotateLogs represents a log file that gets
 // automatically rotated as you write to it.
 type RotateLogs struct {
@@ -18,6 +40,7 @@ type RotateLogs struct {
 	linkName      string
 	maxAge        time.Duration
 	mutex         sync.RWMutex
+	eventHandler  Handler
 	outFh         *os.File
 	pattern       *strftime.Strftime
 	rotationTime  time.Duration
@@ -43,5 +66,5 @@ var Local = clockFn(time.Now)
 // the RotateLogs constructor
 type Option interface {
 	Name() string
-	Value() interface {}
+	Value() interface{}
 }
