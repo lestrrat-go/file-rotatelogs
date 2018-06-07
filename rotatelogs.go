@@ -179,7 +179,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 	rl.generation = generation
 
 	if h := rl.eventHandler; h != nil {
-		go h.Handle(&RotateEvent{
+		go h.Handle(&FileRotatedEvent{
 			prev:    previousFn,
 			current: filename,
 		})

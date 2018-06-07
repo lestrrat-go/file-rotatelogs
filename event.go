@@ -4,14 +4,14 @@ func (h HandlerFunc) Handle(e Event) {
 	h(e)
 }
 
-func (e *RotateEvent) Type() EventType {
-	return FileRotatedEvent
+func (e *FileRotatedEvent) Type() EventType {
+	return FileRotatedEventType
 }
 
-func (e *RotateEvent) PreviousFile() string {
+func (e *FileRotatedEvent) PreviousFile() string {
 	return e.prev
 }
 
-func (e *RotateEvent) CurrentFile() string {
+func (e *FileRotatedEvent) CurrentFile() string {
 	return e.current
 }

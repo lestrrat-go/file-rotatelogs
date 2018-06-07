@@ -21,11 +21,11 @@ type Event interface {
 type EventType int
 
 const (
-	InvalidEvent EventType = iota
-	FileRotatedEvent
+	InvalidEventType EventType = iota
+	FileRotatedEventType
 )
 
-type RotateEvent struct {
+type FileRotatedEvent struct {
 	prev    string // previous filename
 	current string // current, new filename
 }
