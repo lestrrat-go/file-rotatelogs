@@ -163,7 +163,13 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			// Failure to rotate is a problem, but it's really not a great
 			// idea to stop your application just because you couldn't rename
 			// your log.
-			// We only return this error when explicitly needed.
+			//
+			// We only return this error when explicitly needed (as specified by bailOnRotateFail)
+			//
+			// However, we *NEED* to close `fh` here
+			if fh != nil { // probably can't happen, but being paranoid
+				fh.Close()
+			}
 			return nil, err
 		}
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
