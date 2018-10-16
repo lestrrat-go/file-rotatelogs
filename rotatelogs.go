@@ -154,7 +154,13 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			}
 		}
 	}
-
+	// make sure the dir is existed, eg:
+	// ./foo/bar/baz/hello.log must make sure ./foo/bar/baz is existed
+	dirname := filepath.Dir(filename)
+	err := os.MkdirAll(dirname, os.ModePerm)
+	if nil != err {
+		return nil, errors.Errorf("failed to create directory %s: %s", dirname, err)
+	}
 	// if we got here, then we need to create a file
 	fh, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
