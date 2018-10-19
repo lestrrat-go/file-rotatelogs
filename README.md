@@ -1,7 +1,7 @@
 file-rotatelogs
 ==================
 
-Periodically rotates log files from within the application. Port of [File::RotateLogs](https://metacpan.org/release/File-RotateLogs) from Perl to Go.
+Provide an `io.Writer` that periodically rotates log files from within the application. Port of [File::RotateLogs](https://metacpan.org/release/File-RotateLogs) from Perl to Go.
 
 [![Build Status](https://travis-ci.org/lestrrat-go/file-rotatelogs.png?branch=master)](https://travis-ci.org/lestrrat-go/file-rotatelogs)
 
@@ -34,6 +34,9 @@ func main() {
     return
   }
 
+  // Now you must write to logf. apache-logformat library can create
+  // a http.Handler that only writes the approriate logs for the request
+  // to the given handle
   http.ListenAndServe(":8080", apachelog.Wrap(mux, logf))
 }
 ```
