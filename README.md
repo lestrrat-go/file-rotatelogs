@@ -37,7 +37,7 @@ func main() {
   // Now you must write to logf. apache-logformat library can create
   // a http.Handler that only writes the approriate logs for the request
   // to the given handle
-  http.ListenAndServe(":8080", apachelog.Wrap(mux, logf))
+  http.ListenAndServe(":8080", apachelog.CombinedLog.Wrap(mux, logf))
 }
 ```
 
