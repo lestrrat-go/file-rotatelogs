@@ -41,6 +41,7 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 	var linkName string
 	var maxAge time.Duration
 	var handler Handler
+	var forceNewFile bool
 
 	for _, o := range options {
 		switch o.Name() {
@@ -62,6 +63,8 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 			rotationCount = o.Value().(uint)
 		case optkeyHandler:
 			handler = o.Value().(Handler)
+		case optkeyForceNewFile:
+			forceNewFile = true
 		}
 	}
 
@@ -83,6 +86,7 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 		pattern:       pattern,
 		rotationTime:  rotationTime,
 		rotationCount: rotationCount,
+		forceNewFile:  forceNewFile,
 	}, nil
 }
 
@@ -135,24 +139,38 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 	// to log to, which may be newer than rl.currentFilename
 	baseFn := rl.genFilename()
 	filename := baseFn
+	var forceNewFile bool
 	if baseFn != rl.curBaseFn {
 		generation = 0
+		// even though this is the first write after calling New(),
+		// check if a new file needs to be created
+		if rl.forceNewFile {
+			forceNewFile = true
+		}
 	} else {
 		if !useGenerationalNames {
 			// nothing to do
 			return rl.outFh, nil
 		}
-		// This is used when we *REALLY* want to rotate a log.
-		// instead of just using the regular strftime pattern, we
-		// create a new file name using generational names such as
-		// "foo.1", "foo.2", "foo.3", etc
+		forceNewFile = true
+		generation++
+	}
+	if forceNewFile {
+		// A new file has been requested. Instead of just using the
+		// regular strftime pattern, we create a new file name using
+		// generational names such as "foo.1", "foo.2", "foo.3", etc
+		var name string
 		for {
-			generation++
-			name := fmt.Sprintf("%s.%d", filename, generation)
+			if generation == 0 {
+				name = filename
+			} else {
+				name = fmt.Sprintf("%s.%d", filename, generation)
+			}
 			if _, err := os.Stat(name); err != nil {
 				filename = name
 				break
 			}
+			generation++
 		}
 	}
 	// make sure the dir is existed, eg:

@@ -428,3 +428,104 @@ func TestGHIssue23(t *testing.T) {
 		}
 	}
 }
+
+func TestForceNewFile(t *testing.T) {
+	dir, err := ioutil.TempDir("", "file-rotatelogs-force-new-file")
+	if !assert.NoError(t, err, `creating temporary directory should succeed`) {
+		return
+	}
+	defer os.RemoveAll(dir)
+
+	t.Run("Force a new file", func(t *testing.T) {
+
+		rl, err := rotatelogs.New(
+			filepath.Join(dir, "force-new-file.log"),
+			rotatelogs.ForceNewFile(),
+		)
+		if !assert.NoError(t, err, "rotatelogs.New should succeed") {
+			return
+		}
+		rl.Write([]byte("Hello, World!"))
+		rl.Close()
+
+		for i := 0; i < 10; i++ {
+			baseFn := filepath.Join(dir, "force-new-file.log")
+			rl, err := rotatelogs.New(
+				baseFn,
+				rotatelogs.ForceNewFile(),
+			)
+			if !assert.NoError(t, err, "rotatelogs.New should succeed") {
+				return
+			}
+			rl.Write([]byte("Hello, World"))
+			rl.Write([]byte(fmt.Sprintf("%d", i)))
+			rl.Close()
+
+			fn := filepath.Base(rl.CurrentFileName())
+			suffix := strings.TrimPrefix(fn, "force-new-file.log")
+			expectedSuffix := fmt.Sprintf(".%d", i+1)
+			if !assert.True(t, suffix == expectedSuffix, "expected suffix %s found %s", expectedSuffix, suffix) {
+				return
+			}
+			assert.FileExists(t, rl.CurrentFileName(), "file does not exist %s", rl.CurrentFileName())
+			content, err := ioutil.ReadFile(rl.CurrentFileName())
+			if !assert.NoError(t, err, "ioutil.ReadFile %s should succeed", rl.CurrentFileName()) {
+				return
+			}
+			str := fmt.Sprintf("Hello, World%d", i)
+			if !assert.Equal(t, str, string(content), "read %s from file %s, not expected %s", string(content), rl.CurrentFileName(), str) {
+				return
+			}
+
+			assert.FileExists(t, baseFn, "file does not exist %s", baseFn)
+			content, err = ioutil.ReadFile(baseFn)
+			if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
+				return
+			}
+			if !assert.Equal(t, "Hello, World!", string(content), "read %s from file %s, not expected Hello, World!", string(content), baseFn) {
+				return
+			}
+		}
+
+		})
+
+	t.Run("Force a new file with Rotate", func(t *testing.T) {
+
+		baseFn := filepath.Join(dir, "force-new-file-rotate.log")
+		rl, err := rotatelogs.New(
+			baseFn,
+			rotatelogs.ForceNewFile(),
+		)
+		if !assert.NoError(t, err, "rotatelogs.New should succeed") {
+			return
+		}
+		rl.Write([]byte("Hello, World!"))
+
+		for i := 0; i < 10; i++ {
+			if !assert.NoError(t, rl.Rotate(), "rl.Rotate should succeed") {
+				return
+			}
+			rl.Write([]byte("Hello, World"))
+	  		rl.Write([]byte(fmt.Sprintf("%d", i)))
+			assert.FileExists(t, rl.CurrentFileName(), "file does not exist %s", rl.CurrentFileName())
+			content, err := ioutil.ReadFile(rl.CurrentFileName())
+			if !assert.NoError(t, err, "ioutil.ReadFile %s should succeed", rl.CurrentFileName()) {
+				return
+			}
+			str := fmt.Sprintf("Hello, World%d", i)
+			if !assert.Equal(t, str, string(content), "read %s from file %s, not expected %s", string(content), rl.CurrentFileName(), str) {
+				return
+			}
+
+			assert.FileExists(t, baseFn, "file does not exist %s", baseFn)
+			content, err = ioutil.ReadFile(baseFn)
+			if !assert.NoError(t, err, "ioutil.ReadFile should succeed") {
+				return
+			}
+			if !assert.Equal(t, "Hello, World!", string(content), "read %s from file %s, not expected Hello, World!", string(content), baseFn) {
+				return
+			}
+		}
+	})
+}
+

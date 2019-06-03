@@ -46,6 +46,7 @@ type RotateLogs struct {
 	pattern       *strftime.Strftime
 	rotationTime  time.Duration
 	rotationCount uint
+	forceNewFile  bool
 }
 
 // Clock is the interface used by the RotateLogs
