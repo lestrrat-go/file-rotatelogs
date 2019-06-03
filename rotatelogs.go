@@ -133,8 +133,9 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 	previousFn := rl.curFn
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
-	filename := rl.genFilename()
-	if previousFn != filename {
+	baseFn := rl.genFilename()
+	filename := baseFn
+	if baseFn != rl.curBaseFn {
 		generation = 0
 	} else {
 		if !useGenerationalNames {
@@ -186,6 +187,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 
 	rl.outFh.Close()
 	rl.outFh = fh
+	rl.curBaseFn = baseFn
 	rl.curFn = filename
 	rl.generation = generation
 

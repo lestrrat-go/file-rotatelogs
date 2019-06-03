@@ -306,7 +306,7 @@ func TestRotationGenerationalNames(t *testing.T) {
 
 	t.Run("Rotate over unchanged pattern", func(t *testing.T) {
 		rl, err := rotatelogs.New(
-			filepath.Join(dir, "unchaged-pattern.log"),
+			filepath.Join(dir, "unchanged-pattern.log"),
 		)
 		if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
 			return
@@ -323,10 +323,26 @@ func TestRotationGenerationalNames(t *testing.T) {
 			// and the previous files already exist, the filenames should share
 			// the same prefix and have a unique suffix
 			fn := filepath.Base(rl.CurrentFileName())
-			if !assert.True(t, strings.HasPrefix(fn, "unchaged-pattern.log"), "prefix for all filenames should match") {
+			if !assert.True(t, strings.HasPrefix(fn, "unchanged-pattern.log"), "prefix for all filenames should match") {
 				return
 			}
+			rl.Write([]byte("Hello, World!"))
 			suffix := strings.TrimPrefix(fn, "unchanged-pattern.log")
+			expectedSuffix := fmt.Sprintf(".%d", i+1)
+			if !assert.True(t, suffix == expectedSuffix, "expected suffix %s found %s", expectedSuffix, suffix) {
+				return
+			}
+			assert.FileExists(t, rl.CurrentFileName(), "file does not exist %s", rl.CurrentFileName())
+			stat, err := os.Stat(rl.CurrentFileName())
+			if err == nil {
+				if !assert.True(t, stat.Size() == 13, "file %s size is %d, expected 13", rl.CurrentFileName(), stat.Size()) {
+					return
+				}
+			} else {
+				assert.Failf(t, "could not stat file %s", rl.CurrentFileName())
+				return
+			}
+
 			if _, ok := seen[suffix]; !assert.False(t, ok, `filename suffix %s should be unique`, suffix) {
 				return
 			}
