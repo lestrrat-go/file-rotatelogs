@@ -35,6 +35,7 @@ type FileRotatedEvent struct {
 type RotateLogs struct {
 	clock         Clock
 	curFn         string
+	curBaseFn     string
 	globPattern   string
 	generation    int
 	linkName      string
