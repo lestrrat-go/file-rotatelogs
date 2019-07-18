@@ -13,6 +13,7 @@ const (
 	optkeyMaxAge        = "max-age"
 	optkeyRotationTime  = "rotation-time"
 	optkeyRotationCount = "rotation-count"
+	optkeyForceNewFile  = "force-new-file"
 )
 
 // WithClock creates a new Option that sets a clock
@@ -71,4 +72,11 @@ func WithRotationCount(n uint) Option {
 // Currently `FileRotated` event is supported
 func WithHandler(h Handler) Option {
 	return option.New(optkeyHandler, h)
+}
+
+// ForceNewFile ensures a new file is created every time New()
+// is called. If the base file name already exists, an implicit 
+// rotation is performed
+func ForceNewFile() Option {
+	return option.New(optkeyForceNewFile, true)
 }
