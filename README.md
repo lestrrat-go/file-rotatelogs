@@ -138,6 +138,37 @@ Note: Remember to use time.Duration values.
   )
 ```
 
+Please be aware that the timestamps used in the file names are truncated according
+to the rotation time value. For example if you rotate daily, please do not expect
+to have your filenames to contain values for hours, minutes and so forth. i.e.
+the following is doesn't do what you want:
+
+```
+  rotatelogs.New("/var/logs/myapp/log.%Y%m%d%H%M%S.log")
+	// file names will NEVER contain %H%M%S values
+```
+
+This is because when we check if we should be rotating the files, we only check
+if we can create a different file name compared to the previous generation.
+So if you started logging on Aug 1 2019 23:59:59, you might be writing to the file
+`20190801.log`, but then one minute later, you will be writing to `20190802.log`
+because it's already Aug 2, 2019 00:00:00.
+
+So in that regard, `RotationTime` is a misnomer. We don't actually _wait_ for
+the specified amount of time before rotating. Instead, we keep the same file
+name based on the current time normalized by the value of `RotationTime`
+
+```
+  // -> 2019080101.log, 2019080102.log, ... etc
+	rotatelogs.New("%Y%m%d%H.log", rotatelogs.WithRotationTime(time.Hour))
+
+	// -> 201908010101.log, 201908010102.log, ... etc
+	rotatelogs.New("%Y%m%d%H%M.log", rotatelogs.WithRotationTime(time.minute))
+
+  // -> 20190800.log 20190802.log, 20190804.log ...
+	rotatelogs.New("%Y%m%d%H.log", rotatelogs.WithRotationTime(2*time.Hour))
+```
+
 ## MaxAge (default: 7 days)
 
 Time to wait until old logs are purged. By default no logs are purged, which

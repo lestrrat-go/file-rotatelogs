@@ -54,7 +54,14 @@ func WithMaxAge(d time.Duration) Option {
 }
 
 // WithRotationTime creates a new Option that sets the
-// time between rotation.
+// time between rotations. Note that the current time is _normalized_
+// by this value. The default value is 1 day, so any time you log
+// during a given day, it will use the same file name.
+// This means that when you create a pattern, all values after
+// the date will be useless -- for example, the pattern `%H%M%S`
+// will ALWAYS become `000000` when `RotationTime` = 1 day.
+// In order to get values in those fields, you will need to use
+// smaller values for `RotationTime`
 func WithRotationTime(d time.Duration) Option {
 	return option.New(optkeyRotationTime, d)
 }
