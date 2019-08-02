@@ -145,7 +145,7 @@ the following is doesn't do what you want:
 
 ```
   rotatelogs.New("/var/logs/myapp/log.%Y%m%d%H%M%S.log")
-	// file names will NEVER contain %H%M%S values
+  // file names will NEVER contain %H%M%S values
 ```
 
 This is because when we check if we should be rotating the files, we only check
@@ -160,13 +160,13 @@ name based on the current time normalized by the value of `RotationTime`
 
 ```
   // -> 2019080101.log, 2019080102.log, ... etc
-	rotatelogs.New("%Y%m%d%H.log", rotatelogs.WithRotationTime(time.Hour))
+  rotatelogs.New("%Y%m%d%H.log", rotatelogs.WithRotationTime(time.Hour))
 
-	// -> 201908010101.log, 201908010102.log, ... etc
-	rotatelogs.New("%Y%m%d%H%M.log", rotatelogs.WithRotationTime(time.minute))
+  // -> 201908010101.log, 201908010102.log, ... etc
+  rotatelogs.New("%Y%m%d%H%M.log", rotatelogs.WithRotationTime(time.minute))
 
   // -> 20190800.log 20190802.log, 20190804.log ...
-	rotatelogs.New("%Y%m%d%H.log", rotatelogs.WithRotationTime(2*time.Hour))
+  rotatelogs.New("%Y%m%d%H.log", rotatelogs.WithRotationTime(2*time.Hour))
 ```
 
 ## MaxAge (default: 7 days)
