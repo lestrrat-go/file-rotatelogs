@@ -43,7 +43,7 @@ func main() {
 
 # DESCRIPTION
 
-When you integrate this to to you app, it automatically write to logs that
+When you integrate this to into your app, it automatically write to logs that
 are rotated from within the app: No more disk-full alerts because you forgot
 to setup logrotate!
 
