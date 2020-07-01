@@ -198,18 +198,6 @@ already exists, an implicit rotation is performed.
   )
 ```
 
-## ForceNewFile
-
-Ensure a new file is created every time New() is called. If the base file name
-already exists, an implicit rotation is performed.
-
-```go
-  rotatelogs.New(
-    "/var/log/myapp/log.%Y%m%d",
-    rotatelogs.ForceNewFile(),
-  )
-```
-
 # Rotating files forcefully
 
 If you want to rotate files forcefully before the actual rotation time has reached,
