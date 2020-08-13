@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,7 +123,7 @@ func TestLogRotate(t *testing.T) {
 		t.Errorf("Failed to readlink %s: %s", linkName, err)
 	}
 
-	if linkDest != newfn {
+	if linkDest != path.Base(newfn) {
 		t.Errorf(`Symlink destination does not match expected filename ("%s" != "%s")`, newfn, linkDest)
 	}
 }
