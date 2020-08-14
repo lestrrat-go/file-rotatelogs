@@ -124,7 +124,7 @@ func TestLogRotate(t *testing.T) {
 	}
 
 	if linkDest != path.Base(newfn) {
-		t.Errorf(`Symlink destination does not match expected filename ("%s" != "%s")`, newfn, linkDest)
+		t.Errorf(`Symlink destination does not match expected filename ("%s" != "%s")`, path.Base(newfn), linkDest)
 	}
 }
 
