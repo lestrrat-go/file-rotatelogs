@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -280,7 +279,11 @@ func (rl *RotateLogs) rotate_nolock(filename string) error {
 
 	if rl.linkName != "" {
 		tmpLinkName := filename + `_symlink`
-		if err := os.Symlink(path.Base(filename), tmpLinkName); err != nil {
+		linkDest := filename
+		if filepath.Dir(rl.linkName) == filepath.Dir(filename) {
+			linkDest = filepath.Base(filename)
+		}
+		if err := os.Symlink(linkDest, tmpLinkName); err != nil {
 			return errors.Wrap(err, `failed to create new symlink`)
 		}
 
