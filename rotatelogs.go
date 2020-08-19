@@ -279,12 +279,34 @@ func (rl *RotateLogs) rotate_nolock(filename string) error {
 
 	if rl.linkName != "" {
 		tmpLinkName := filename + `_symlink`
+
+		// Change how the link name is generated based on where the
+		// target location is. if the location is directly underneath
+		// the main filename's parent directory, then we create a
+		// symlink with a relative path
 		linkDest := filename
-		if filepath.Dir(rl.linkName) == filepath.Dir(filename) {
-			linkDest = filepath.Base(filename)
+		linkDir := filepath.Dir(rl.linkName)
+
+		baseDir := filepath.Dir(filename)
+		if strings.Contains(rl.linkName, baseDir) {
+			tmp, err := filepath.Rel(linkDir, filename)
+			if err != nil {
+				return errors.Wrapf(err, `failed to evaluate relative path from %#v to %#v`, baseDir, rl.linkName)
+			}
+
+			linkDest = tmp
 		}
+
 		if err := os.Symlink(linkDest, tmpLinkName); err != nil {
 			return errors.Wrap(err, `failed to create new symlink`)
+		}
+
+		// the directory where rl.linkName should be created must exist
+		_, err := os.Stat(linkDir)
+		if err != nil { // Assume err != nil means the directory doesn't exist
+			if err := os.MkdirAll(linkDir, 0755); err != nil {
+				return errors.Wrapf(err, `failed to create directory %s`, linkDir)
+			}
 		}
 
 		if err := os.Rename(tmpLinkName, rl.linkName); err != nil {
