@@ -30,100 +30,155 @@ func TestSatisfiesIOCloser(t *testing.T) {
 }
 
 func TestLogRotate(t *testing.T) {
-	dir, err := ioutil.TempDir("", "file-rotatelogs-test")
-	if !assert.NoError(t, err, "creating temporary directory should succeed") {
-		return
-	}
-	defer os.RemoveAll(dir)
+	testCases := []struct {
+		Name        string
+		FixArgs     func([]rotatelogs.Option, string) []rotatelogs.Option
+		CheckExtras func(*testing.T, *rotatelogs.RotateLogs, string) bool
+	}{
+		{
+			Name: "Basic Usage",
+		},
+		{
+			Name: "With Symlink",
+			FixArgs: func(options []rotatelogs.Option, dir string) []rotatelogs.Option {
+				linkName := filepath.Join(dir, "log")
+				return append(options, rotatelogs.WithLinkName(linkName))
+			},
+			CheckExtras: func(t *testing.T, rl *rotatelogs.RotateLogs, dir string) bool {
+				linkName := filepath.Join(dir, "log")
+				linkDest, err := os.Readlink(linkName)
+				if !assert.NoError(t, err, `os.Readlink(%#v) should succeed`, linkName) {
+					return false
+				}
 
-	// Change current time, so we can safely purge old logs
-	dummyTime := time.Now().Add(-7 * 24 * time.Hour)
-	dummyTime = dummyTime.Add(time.Duration(-1 * dummyTime.Nanosecond()))
-	clock := clockwork.NewFakeClockAt(dummyTime)
-	linkName := filepath.Join(dir, "log")
-	rl, err := rotatelogs.New(
-		filepath.Join(dir, "log%Y%m%d%H%M%S"),
-		rotatelogs.WithClock(clock),
-		rotatelogs.WithMaxAge(24*time.Hour),
-		rotatelogs.WithLinkName(linkName),
-	)
-	if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
-		return
-	}
-	defer rl.Close()
+				expectedLinkDest := filepath.Base(rl.CurrentFileName())
+				t.Logf("expecting relative link: %s", expectedLinkDest)
+				if !assert.Equal(t, linkDest, expectedLinkDest, `Symlink destination should  match expected filename (%#v != %#v)`, expectedLinkDest, linkDest) {
+					return false
+				}
+				return true
+			},
+		},
+		{
+			Name: "With Symlink (multiple levels)",
+			FixArgs: func(options []rotatelogs.Option, dir string) []rotatelogs.Option {
+				linkName := filepath.Join(dir, "nest1", "nest2", "log")
+				return append(options, rotatelogs.WithLinkName(linkName))
+			},
+			CheckExtras: func(t *testing.T, rl *rotatelogs.RotateLogs, dir string) bool {
+				linkName := filepath.Join(dir, "nest1", "nest2", "log")
+				linkDest, err := os.Readlink(linkName)
+				if !assert.NoError(t, err, `os.Readlink(%#v) should succeed`, linkName) {
+					return false
+				}
 
-	str := "Hello, World"
-	n, err := rl.Write([]byte(str))
-	if !assert.NoError(t, err, "rl.Write should succeed") {
-		return
-	}
-
-	if !assert.Len(t, str, n, "rl.Write should succeed") {
-		return
-	}
-
-	fn := rl.CurrentFileName()
-	if fn == "" {
-		t.Errorf("Could not get filename %s", fn)
-	}
-
-	content, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Errorf("Failed to read file %s: %s", fn, err)
-	}
-
-	if string(content) != str {
-		t.Errorf(`File content does not match (was "%s")`, content)
-	}
-
-	err = os.Chtimes(fn, dummyTime, dummyTime)
-	if err != nil {
-		t.Errorf("Failed to change access/modification times for %s: %s", fn, err)
-	}
-
-	fi, err := os.Stat(fn)
-	if err != nil {
-		t.Errorf("Failed to stat %s: %s", fn, err)
+				expectedLinkDest := filepath.Join("..", "..", filepath.Base(rl.CurrentFileName()))
+				t.Logf("expecting relative link: %s", expectedLinkDest)
+				if !assert.Equal(t, linkDest, expectedLinkDest, `Symlink destination should  match expected filename (%#v != %#v)`, expectedLinkDest, linkDest) {
+					return false
+				}
+				return true
+			},
+		},
 	}
 
-	if !fi.ModTime().Equal(dummyTime) {
-		t.Errorf("Failed to chtime for %s (expected %s, got %s)", fn, fi.ModTime(), dummyTime)
-	}
+	for i, tc := range testCases {
+		i := i   // avoid lint errors
+		tc := tc // avoid lint errors
+		t.Run(tc.Name, func(t *testing.T) {
+			dir, err := ioutil.TempDir("", fmt.Sprintf("file-rotatelogs-test%d", i))
+			if !assert.NoError(t, err, "creating temporary directory should succeed") {
+				return
+			}
+			defer os.RemoveAll(dir)
 
-	clock.Advance(time.Duration(7 * 24 * time.Hour))
+			// Change current time, so we can safely purge old logs
+			dummyTime := time.Now().Add(-7 * 24 * time.Hour)
+			dummyTime = dummyTime.Add(time.Duration(-1 * dummyTime.Nanosecond()))
+			clock := clockwork.NewFakeClockAt(dummyTime)
 
-	// This next Write() should trigger Rotate()
-	rl.Write([]byte(str))
-	newfn := rl.CurrentFileName()
-	if newfn == fn {
-		t.Errorf(`New file name and old file name should not match ("%s" != "%s")`, fn, newfn)
-	}
+			options := []rotatelogs.Option{rotatelogs.WithClock(clock), rotatelogs.WithMaxAge(24 * time.Hour)}
+			if fn := tc.FixArgs; fn != nil {
+				options = fn(options, dir)
+			}
 
-	content, err = ioutil.ReadFile(newfn)
-	if err != nil {
-		t.Errorf("Failed to read file %s: %s", newfn, err)
-	}
+			rl, err := rotatelogs.New(filepath.Join(dir, "log%Y%m%d%H%M%S"), options...)
+			if !assert.NoError(t, err, `rotatelogs.New should succeed`) {
+				return
+			}
+			defer rl.Close()
 
-	if string(content) != str {
-		t.Errorf(`File content does not match (was "%s")`, content)
-	}
+			str := "Hello, World"
+			n, err := rl.Write([]byte(str))
+			if !assert.NoError(t, err, "rl.Write should succeed") {
+				return
+			}
 
-	time.Sleep(time.Second)
+			if !assert.Len(t, str, n, "rl.Write should succeed") {
+				return
+			}
 
-	// fn was declared above, before mocking CurrentTime
-	// Old files should have been unlinked
-	_, err = os.Stat(fn)
-	if !assert.Error(t, err, "os.Stat should have failed") {
-		return
-	}
+			fn := rl.CurrentFileName()
+			if fn == "" {
+				t.Errorf("Could not get filename %s", fn)
+			}
 
-	linkDest, err := os.Readlink(linkName)
-	if err != nil {
-		t.Errorf("Failed to readlink %s: %s", linkName, err)
-	}
+			content, err := ioutil.ReadFile(fn)
+			if err != nil {
+				t.Errorf("Failed to read file %s: %s", fn, err)
+			}
 
-	if linkDest != newfn {
-		t.Errorf(`Symlink destination does not match expected filename ("%s" != "%s")`, newfn, linkDest)
+			if string(content) != str {
+				t.Errorf(`File content does not match (was "%s")`, content)
+			}
+
+			err = os.Chtimes(fn, dummyTime, dummyTime)
+			if err != nil {
+				t.Errorf("Failed to change access/modification times for %s: %s", fn, err)
+			}
+
+			fi, err := os.Stat(fn)
+			if err != nil {
+				t.Errorf("Failed to stat %s: %s", fn, err)
+			}
+
+			if !fi.ModTime().Equal(dummyTime) {
+				t.Errorf("Failed to chtime for %s (expected %s, got %s)", fn, fi.ModTime(), dummyTime)
+			}
+
+			clock.Advance(time.Duration(7 * 24 * time.Hour))
+
+			// This next Write() should trigger Rotate()
+			rl.Write([]byte(str))
+			newfn := rl.CurrentFileName()
+			if newfn == fn {
+				t.Errorf(`New file name and old file name should not match ("%s" != "%s")`, fn, newfn)
+			}
+
+			content, err = ioutil.ReadFile(newfn)
+			if err != nil {
+				t.Errorf("Failed to read file %s: %s", newfn, err)
+			}
+
+			if string(content) != str {
+				t.Errorf(`File content does not match (was "%s")`, content)
+			}
+
+			time.Sleep(time.Second)
+
+			// fn was declared above, before mocking CurrentTime
+			// Old files should have been unlinked
+			_, err = os.Stat(fn)
+			if !assert.Error(t, err, "os.Stat should have failed") {
+				return
+			}
+
+			if fn := tc.CheckExtras; fn != nil {
+				if !fn(t, rl, dir) {
+					return
+				}
+			}
+		})
 	}
 }
 
@@ -396,13 +451,13 @@ func TestGHIssue23(t *testing.T) {
 			Clock    rotatelogs.Clock
 		}{
 			{
-				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".201806010000.log"),
+				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1))+".201806010000.log"),
 				Clock: ClockFunc(func() time.Time {
 					return time.Date(2018, 6, 1, 3, 18, 0, 0, loc)
 				}),
 			},
 			{
-				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".201712310000.log"),
+				Expected: filepath.Join(dir, strings.ToLower(strings.Replace(locName, "/", "_", -1))+".201712310000.log"),
 				Clock: ClockFunc(func() time.Time {
 					return time.Date(2017, 12, 31, 23, 52, 0, 0, loc)
 				}),
@@ -487,7 +542,7 @@ func TestForceNewFile(t *testing.T) {
 			}
 		}
 
-		})
+	})
 
 	t.Run("Force a new file with Rotate", func(t *testing.T) {
 
@@ -506,7 +561,7 @@ func TestForceNewFile(t *testing.T) {
 				return
 			}
 			rl.Write([]byte("Hello, World"))
-	  		rl.Write([]byte(fmt.Sprintf("%d", i)))
+			rl.Write([]byte(fmt.Sprintf("%d", i)))
 			assert.FileExists(t, rl.CurrentFileName(), "file does not exist %s", rl.CurrentFileName())
 			content, err := ioutil.ReadFile(rl.CurrentFileName())
 			if !assert.NoError(t, err, "ioutil.ReadFile %s should succeed", rl.CurrentFileName()) {
@@ -528,4 +583,3 @@ func TestForceNewFile(t *testing.T) {
 		}
 	})
 }
-

@@ -123,6 +123,15 @@ always check at the same location for log files even if the logs were rotated
   $ tail -f /var/log/myapp/current
 ```
 
+Links that share the same parent directory with the main log path will get a
+special treatment: namely, linked paths will be *RELATIVE* to the main log file.
+
+| Main log file name  | Link name           | Linked path           |
+|---------------------|---------------------|-----------------------|
+| /path/to/log.%Y%m%d | /path/to/log        | log.YYYYMMDD          |
+| /path/to/log.%Y%m%d | /path/to/nested/log | ../log.YYYYMMDD       |
+| /path/to/log.%Y%m%d | /foo/bar/baz/log    | /path/to/log.YYYYMMDD |
+
 If not provided, no link will be written.
 
 ## RotationTime (default: 86400 sec)
