@@ -12,6 +12,7 @@ const (
 	optkeyLinkName      = "link-name"
 	optkeyMaxAge        = "max-age"
 	optkeyRotationTime  = "rotation-time"
+	optkeyRotationSize  = "rotation-size"
 	optkeyRotationCount = "rotation-count"
 	optkeyForceNewFile  = "force-new-file"
 )
@@ -58,6 +59,12 @@ func WithMaxAge(d time.Duration) Option {
 // time between rotation.
 func WithRotationTime(d time.Duration) Option {
 	return option.New(optkeyRotationTime, d)
+}
+
+// WithRotationSize creates a new Option that sets the
+// log file size between rotation.
+func WithRotationSize(s int64) Option {
+	return option.New(optkeyRotationSize, s)
 }
 
 // WithRotationCount creates a new Option that sets the
