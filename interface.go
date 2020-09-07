@@ -45,6 +45,7 @@ type RotateLogs struct {
 	outFh         *os.File
 	pattern       *strftime.Strftime
 	rotationTime  time.Duration
+	rotationSize  int64
 	rotationCount uint
 	forceNewFile  bool
 }
