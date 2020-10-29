@@ -42,6 +42,7 @@ func TestLogRotate(t *testing.T) {
 			Name: "With Symlink",
 			FixArgs: func(options []rotatelogs.Option, dir string) []rotatelogs.Option {
 				linkName := filepath.Join(dir, "log")
+
 				return append(options, rotatelogs.WithLinkName(linkName))
 			},
 			CheckExtras: func(t *testing.T, rl *rotatelogs.RotateLogs, dir string) bool {
@@ -53,16 +54,15 @@ func TestLogRotate(t *testing.T) {
 
 				expectedLinkDest := filepath.Base(rl.CurrentFileName())
 				t.Logf("expecting relative link: %s", expectedLinkDest)
-				if !assert.Equal(t, linkDest, expectedLinkDest, `Symlink destination should  match expected filename (%#v != %#v)`, expectedLinkDest, linkDest) {
-					return false
-				}
-				return true
+
+				return assert.Equal(t, linkDest, expectedLinkDest, `Symlink destination should  match expected filename (%#v != %#v)`, expectedLinkDest, linkDest)
 			},
 		},
 		{
 			Name: "With Symlink (multiple levels)",
 			FixArgs: func(options []rotatelogs.Option, dir string) []rotatelogs.Option {
 				linkName := filepath.Join(dir, "nest1", "nest2", "log")
+
 				return append(options, rotatelogs.WithLinkName(linkName))
 			},
 			CheckExtras: func(t *testing.T, rl *rotatelogs.RotateLogs, dir string) bool {
@@ -74,10 +74,8 @@ func TestLogRotate(t *testing.T) {
 
 				expectedLinkDest := filepath.Join("..", "..", filepath.Base(rl.CurrentFileName()))
 				t.Logf("expecting relative link: %s", expectedLinkDest)
-				if !assert.Equal(t, linkDest, expectedLinkDest, `Symlink destination should  match expected filename (%#v != %#v)`, expectedLinkDest, linkDest) {
-					return false
-				}
-				return true
+
+				return assert.Equal(t, linkDest, expectedLinkDest, `Symlink destination should  match expected filename (%#v != %#v)`, expectedLinkDest, linkDest)
 			},
 		},
 	}
@@ -146,7 +144,7 @@ func TestLogRotate(t *testing.T) {
 				t.Errorf("Failed to chtime for %s (expected %s, got %s)", fn, fi.ModTime(), dummyTime)
 			}
 
-			clock.Advance(time.Duration(7 * 24 * time.Hour))
+			clock.Advance(7 * 24 * time.Hour)
 
 			// This next Write() should trigger Rotate()
 			rl.Write([]byte(str))
@@ -253,14 +251,14 @@ func TestLogRotationCount(t *testing.T) {
 			return
 		}
 		time.Sleep(time.Second)
-		files, err := filepath.Glob(filepath.Join(dir, "log*"))
+		files, _ := filepath.Glob(filepath.Join(dir, "log*"))
 		if !assert.Equal(t, 1, len(files), "Only latest log is kept") {
 			return
 		}
 	})
 
 	t.Run("Old log files are purged except 2 log files", func(t *testing.T) {
-		CreateRotationTestFile(dir, dummyTime, time.Duration(time.Hour), 5)
+		CreateRotationTestFile(dir, dummyTime, time.Hour, 5)
 		rl, err := rotatelogs.New(
 			filepath.Join(dir, "log%Y%m%d%H%M%S"),
 			rotatelogs.WithClock(clock),
@@ -280,12 +278,11 @@ func TestLogRotationCount(t *testing.T) {
 			return
 		}
 		time.Sleep(time.Second)
-		files, err := filepath.Glob(filepath.Join(dir, "log*"))
+		files, _ := filepath.Glob(filepath.Join(dir, "log*"))
 		if !assert.Equal(t, 2, len(files), "One file is kept") {
 			return
 		}
 	})
-
 }
 
 func TestLogSetOutput(t *testing.T) {
@@ -395,6 +392,7 @@ func TestRotationGenerationalNames(t *testing.T) {
 				}
 			} else {
 				assert.Failf(t, "could not stat file %s", rl.CurrentFileName())
+
 				return
 			}
 
@@ -445,6 +443,7 @@ func TestGHIssue23(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	for _, locName := range []string{"Asia/Tokyo", "Pacific/Honolulu"} {
+		locName := locName
 		loc, _ := time.LoadLocation(locName)
 		tests := []struct {
 			Expected string
@@ -464,6 +463,7 @@ func TestGHIssue23(t *testing.T) {
 			},
 		}
 		for _, test := range tests {
+			test := test
 			t.Run(fmt.Sprintf("location = %s, time = %s", locName, test.Clock.Now().Format(time.RFC3339)), func(t *testing.T) {
 				template := strings.ToLower(strings.Replace(locName, "/", "_", -1)) + ".%Y%m%d%H%M.log"
 				rl, err := rotatelogs.New(
@@ -492,7 +492,6 @@ func TestForceNewFile(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	t.Run("Force a new file", func(t *testing.T) {
-
 		rl, err := rotatelogs.New(
 			filepath.Join(dir, "force-new-file.log"),
 			rotatelogs.ForceNewFile(),
@@ -541,11 +540,9 @@ func TestForceNewFile(t *testing.T) {
 				return
 			}
 		}
-
 	})
 
 	t.Run("Force a new file with Rotate", func(t *testing.T) {
-
 		baseFn := filepath.Join(dir, "force-new-file-rotate.log")
 		rl, err := rotatelogs.New(
 			baseFn,

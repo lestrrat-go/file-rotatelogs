@@ -1,4 +1,4 @@
-package rotatelogs
+package fileutil_test
 
 import (
 	"fmt"
@@ -6,28 +6,25 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/lestrrat-go/file-rotatelogs/internal/fileutil"
+	"github.com/lestrrat-go/strftime"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenFilename(t *testing.T) {
+func TestGenerateFn(t *testing.T) {
 	// Mock time
 	ts := []time.Time{
-		time.Time{},
+		{},
 		(time.Time{}).Add(24 * time.Hour),
 	}
 
 	for _, xt := range ts {
-		rl, err := New(
-			"/path/to/%Y/%m/%d",
-			WithClock(clockwork.NewFakeClockAt(xt)),
-		)
-		if !assert.NoError(t, err, "New should succeed") {
+		pattern, err := strftime.New("/path/to/%Y/%m/%d")
+		if !assert.NoError(t, err, `strftime.New should succeed`) {
 			return
 		}
-
-		defer rl.Close()
-
-		fn := rl.genFilename()
+		clock := clockwork.NewFakeClockAt(xt)
+		fn := fileutil.GenerateFn(pattern, clock, 24*time.Hour)
 		expected := fmt.Sprintf("/path/to/%04d/%02d/%02d",
 			xt.Year(),
 			xt.Month(),

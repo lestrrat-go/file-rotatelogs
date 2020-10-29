@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lestrrat-go/file-rotatelogs/internal/fileutil"
 	strftime "github.com/lestrrat-go/strftime"
 	"github.com/pkg/errors"
 )
@@ -91,34 +92,10 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 		maxAge:        maxAge,
 		pattern:       pattern,
 		rotationTime:  rotationTime,
-		rotationSize: rotationSize,
+		rotationSize:  rotationSize,
 		rotationCount: rotationCount,
 		forceNewFile:  forceNewFile,
 	}, nil
-}
-
-func (rl *RotateLogs) genFilename() string {
-	now := rl.clock.Now()
-
-	// XXX HACK: Truncate only happens in UTC semantics, apparently.
-	// observed values for truncating given time with 86400 secs:
-	//
-	// before truncation: 2018/06/01 03:54:54 2018-06-01T03:18:00+09:00
-	// after  truncation: 2018/06/01 03:54:54 2018-05-31T09:00:00+09:00
-	//
-	// This is really annoying when we want to truncate in local time
-	// so we hack: we take the apparent local time in the local zone,
-	// and pretend that it's in UTC. do our math, and put it back to
-	// the local zone
-	var base time.Time
-	if now.Location() != time.UTC {
-		base = time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), time.UTC)
-		base = base.Truncate(time.Duration(rl.rotationTime))
-		base = time.Date(base.Year(), base.Month(), base.Day(), base.Hour(), base.Minute(), base.Second(), base.Nanosecond(), base.Location())
-	} else {
-		base = now.Truncate(time.Duration(rl.rotationTime))
-	}
-	return rl.pattern.FormatString(base)
 }
 
 // Write satisfies the io.Writer interface. It writes to the
@@ -130,7 +107,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
-	out, err := rl.getWriter_nolock(false, false)
+	out, err := rl.getWriterNolock(false, false)
 	if err != nil {
 		return 0, errors.Wrap(err, `failed to acquite target io.Writer`)
 	}
@@ -139,12 +116,13 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 }
 
 // must be locked during this operation
-func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
+func (rl *RotateLogs) getWriterNolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
 	generation := rl.generation
 	previousFn := rl.curFn
+
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
-	baseFn := rl.genFilename()
+	baseFn := fileutil.GenerateFn(rl.pattern, rl.clock, rl.rotationTime)
 	filename := baseFn
 	var forceNewFile bool
 
@@ -183,24 +161,19 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			}
 			if _, err := os.Stat(name); err != nil {
 				filename = name
+
 				break
 			}
 			generation++
 		}
 	}
-	// make sure the dir is existed, eg:
-	// ./foo/bar/baz/hello.log must make sure ./foo/bar/baz is existed
-	dirname := filepath.Dir(filename)
-	if err := os.MkdirAll(dirname, 0755); err != nil {
-		return nil, errors.Wrapf(err, "failed to create directory %s", dirname)
-	}
-	// if we got here, then we need to create a file
-	fh, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
+	fh, err := fileutil.CreateFile(filename)
 	if err != nil {
-		return nil, errors.Errorf("failed to open file %s: %s", rl.pattern, err)
+		return nil, errors.Wrapf(err, `failed to create a new file %v`, filename)
 	}
 
-	if err := rl.rotate_nolock(filename); err != nil {
+	if err := rl.rotateNolock(filename); err != nil {
 		err = errors.Wrap(err, "failed to rotate")
 		if bailOnRotateFail {
 			// Failure to rotate is a problem, but it's really not a great
@@ -213,6 +186,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			if fh != nil { // probably can't happen, but being paranoid
 				fh.Close()
 			}
+
 			return nil, err
 		}
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
@@ -230,6 +204,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			current: filename,
 		})
 	}
+
 	return fh, nil
 }
 
@@ -238,6 +213,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 func (rl *RotateLogs) CurrentFileName() string {
 	rl.mutex.RLock()
 	defer rl.mutex.RUnlock()
+
 	return rl.curFn
 }
 
@@ -257,6 +233,7 @@ func (g *cleanupGuard) Enable() {
 	defer g.mutex.Unlock()
 	g.enable = true
 }
+
 func (g *cleanupGuard) Run() {
 	g.fn()
 }
@@ -271,13 +248,12 @@ func (g *cleanupGuard) Run() {
 func (rl *RotateLogs) Rotate() error {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
-	if _, err := rl.getWriter_nolock(true, true); err != nil {
-		return err
-	}
-	return nil
+	_, err := rl.getWriterNolock(true, true)
+
+	return err
 }
 
-func (rl *RotateLogs) rotate_nolock(filename string) error {
+func (rl *RotateLogs) rotateNolock(filename string) error {
 	lockfn := filename + `_lock`
 	fh, err := os.OpenFile(lockfn, os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -339,7 +315,9 @@ func (rl *RotateLogs) rotate_nolock(filename string) error {
 	}
 
 	cutoff := rl.clock.Now().Add(-1 * rl.maxAge)
-	var toUnlink []string
+
+	// the linter tells me to pre allocate this...
+	toUnlink := make([]string, 0, len(matches))
 	for _, path := range matches {
 		// Ignore lock files
 		if strings.HasSuffix(path, "_lock") || strings.HasSuffix(path, "_symlink") {
@@ -403,5 +381,6 @@ func (rl *RotateLogs) Close() error {
 
 	rl.outFh.Close()
 	rl.outFh = nil
+
 	return nil
 }

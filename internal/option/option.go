@@ -20,6 +20,7 @@ func New(name string, value interface{}) *Option {
 func (o *Option) Name() string {
 	return o.name
 }
+
 func (o *Option) Value() interface{} {
 	return o.value
 }
