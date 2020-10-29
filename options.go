@@ -82,7 +82,7 @@ func WithHandler(h Handler) Option {
 }
 
 // ForceNewFile ensures a new file is created every time New()
-// is called. If the base file name already exists, an implicit 
+// is called. If the base file name already exists, an implicit
 // rotation is performed
 func ForceNewFile() Option {
 	return option.New(optkeyForceNewFile, true)
