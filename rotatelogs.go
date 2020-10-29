@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lestrrat-go/file-rotatelogs/internal/fileutil"
 	strftime "github.com/lestrrat-go/strftime"
 	"github.com/pkg/errors"
 )
@@ -91,34 +92,10 @@ func New(p string, options ...Option) (*RotateLogs, error) {
 		maxAge:        maxAge,
 		pattern:       pattern,
 		rotationTime:  rotationTime,
-		rotationSize: rotationSize,
+		rotationSize:  rotationSize,
 		rotationCount: rotationCount,
 		forceNewFile:  forceNewFile,
 	}, nil
-}
-
-func (rl *RotateLogs) genFilename() string {
-	now := rl.clock.Now()
-
-	// XXX HACK: Truncate only happens in UTC semantics, apparently.
-	// observed values for truncating given time with 86400 secs:
-	//
-	// before truncation: 2018/06/01 03:54:54 2018-06-01T03:18:00+09:00
-	// after  truncation: 2018/06/01 03:54:54 2018-05-31T09:00:00+09:00
-	//
-	// This is really annoying when we want to truncate in local time
-	// so we hack: we take the apparent local time in the local zone,
-	// and pretend that it's in UTC. do our math, and put it back to
-	// the local zone
-	var base time.Time
-	if now.Location() != time.UTC {
-		base = time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), time.UTC)
-		base = base.Truncate(time.Duration(rl.rotationTime))
-		base = time.Date(base.Year(), base.Month(), base.Day(), base.Hour(), base.Minute(), base.Second(), base.Nanosecond(), base.Location())
-	} else {
-		base = now.Truncate(time.Duration(rl.rotationTime))
-	}
-	return rl.pattern.FormatString(base)
 }
 
 // Write satisfies the io.Writer interface. It writes to the
@@ -142,9 +119,10 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
 	generation := rl.generation
 	previousFn := rl.curFn
+
 	// This filename contains the name of the "NEW" filename
 	// to log to, which may be newer than rl.currentFilename
-	baseFn := rl.genFilename()
+	baseFn := fileutil.GenerateFn(rl.pattern, rl.clock, rl.rotationTime)
 	filename := baseFn
 	var forceNewFile bool
 
@@ -188,16 +166,10 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			generation++
 		}
 	}
-	// make sure the dir is existed, eg:
-	// ./foo/bar/baz/hello.log must make sure ./foo/bar/baz is existed
-	dirname := filepath.Dir(filename)
-	if err := os.MkdirAll(dirname, 0755); err != nil {
-		return nil, errors.Wrapf(err, "failed to create directory %s", dirname)
-	}
-	// if we got here, then we need to create a file
-	fh, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+
+	fh, err := fileutil.CreateFile(filename)
 	if err != nil {
-		return nil, errors.Errorf("failed to open file %s: %s", rl.pattern, err)
+		return nil, errors.Wrapf(err, `failed to create a new file %v`, filename)
 	}
 
 	if err := rl.rotate_nolock(filename); err != nil {
