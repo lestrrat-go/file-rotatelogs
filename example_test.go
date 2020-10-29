@@ -12,6 +12,7 @@ func ExampleForceNewFile() {
 	logDir, err := ioutil.TempDir("", "rotatelogs_test")
 	if err != nil {
 		fmt.Println("could not create log directory ", err)
+
 		return
 	}
 	logPath := fmt.Sprintf("%s/test.log", logDir)
@@ -22,17 +23,20 @@ func ExampleForceNewFile() {
 		)
 		if err != nil {
 			fmt.Println("Could not open log file ", err)
+
 			return
 		}
 
 		n, err := writer.Write([]byte("test"))
 		if err != nil || n != 4 {
 			fmt.Println("Write failed ", err, " number written ", n)
+
 			return
 		}
 		err = writer.Close()
 		if err != nil {
 			fmt.Println("Close failed ", err)
+
 			return
 		}
 	}
@@ -40,6 +44,7 @@ func ExampleForceNewFile() {
 	files, err := ioutil.ReadDir(logDir)
 	if err != nil {
 		fmt.Println("ReadDir failed ", err)
+
 		return
 	}
 	for _, file := range files {
@@ -49,6 +54,7 @@ func ExampleForceNewFile() {
 	err = os.RemoveAll(logDir)
 	if err != nil {
 		fmt.Println("RemoveAll failed ", err)
+
 		return
 	}
 	// OUTPUT:

@@ -107,7 +107,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
-	out, err := rl.getWriter_nolock(false, false)
+	out, err := rl.getWriterNolock(false, false)
 	if err != nil {
 		return 0, errors.Wrap(err, `failed to acquite target io.Writer`)
 	}
@@ -116,7 +116,7 @@ func (rl *RotateLogs) Write(p []byte) (n int, err error) {
 }
 
 // must be locked during this operation
-func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
+func (rl *RotateLogs) getWriterNolock(bailOnRotateFail, useGenerationalNames bool) (io.Writer, error) {
 	generation := rl.generation
 	previousFn := rl.curFn
 
@@ -161,6 +161,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			}
 			if _, err := os.Stat(name); err != nil {
 				filename = name
+
 				break
 			}
 			generation++
@@ -172,7 +173,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 		return nil, errors.Wrapf(err, `failed to create a new file %v`, filename)
 	}
 
-	if err := rl.rotate_nolock(filename); err != nil {
+	if err := rl.rotateNolock(filename); err != nil {
 		err = errors.Wrap(err, "failed to rotate")
 		if bailOnRotateFail {
 			// Failure to rotate is a problem, but it's really not a great
@@ -185,6 +186,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			if fh != nil { // probably can't happen, but being paranoid
 				fh.Close()
 			}
+
 			return nil, err
 		}
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
@@ -202,6 +204,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 			current: filename,
 		})
 	}
+
 	return fh, nil
 }
 
@@ -210,6 +213,7 @@ func (rl *RotateLogs) getWriter_nolock(bailOnRotateFail, useGenerationalNames bo
 func (rl *RotateLogs) CurrentFileName() string {
 	rl.mutex.RLock()
 	defer rl.mutex.RUnlock()
+
 	return rl.curFn
 }
 
@@ -229,6 +233,7 @@ func (g *cleanupGuard) Enable() {
 	defer g.mutex.Unlock()
 	g.enable = true
 }
+
 func (g *cleanupGuard) Run() {
 	g.fn()
 }
@@ -243,13 +248,12 @@ func (g *cleanupGuard) Run() {
 func (rl *RotateLogs) Rotate() error {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
-	if _, err := rl.getWriter_nolock(true, true); err != nil {
-		return err
-	}
-	return nil
+	_, err := rl.getWriterNolock(true, true)
+
+	return err
 }
 
-func (rl *RotateLogs) rotate_nolock(filename string) error {
+func (rl *RotateLogs) rotateNolock(filename string) error {
 	lockfn := filename + `_lock`
 	fh, err := os.OpenFile(lockfn, os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -311,7 +315,9 @@ func (rl *RotateLogs) rotate_nolock(filename string) error {
 	}
 
 	cutoff := rl.clock.Now().Add(-1 * rl.maxAge)
-	var toUnlink []string
+
+	// the linter tells me to pre allocate this...
+	toUnlink := make([]string, 0, len(matches))
 	for _, path := range matches {
 		// Ignore lock files
 		if strings.HasSuffix(path, "_lock") || strings.HasSuffix(path, "_symlink") {
@@ -375,5 +381,6 @@ func (rl *RotateLogs) Close() error {
 
 	rl.outFh.Close()
 	rl.outFh = nil
+
 	return nil
 }

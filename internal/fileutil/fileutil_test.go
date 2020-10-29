@@ -14,7 +14,7 @@ import (
 func TestGenerateFn(t *testing.T) {
 	// Mock time
 	ts := []time.Time{
-		time.Time{},
+		{},
 		(time.Time{}).Add(24 * time.Hour),
 	}
 
