@@ -62,7 +62,7 @@ import(
   "log"
   "github.com/lestrrat-go/file-rotatelogs"
 )
-  
+
 func main() {
   rl, _ := rotatelogs.New("/path/to/access_log.%Y%m%d%H%M")
 
@@ -108,7 +108,7 @@ the rotatelog to respect it.
 
 ## LinkName (default: "")
 
-Path where a symlink for the actual log file is placed. This allows you to 
+Path where a symlink for the actual log file is placed. This allows you to
 always check at the same location for log files even if the logs were rotated
 
 ```go
@@ -184,13 +184,13 @@ object. Currently only supported event type is FiledRotated
 ```go
   rotatelogs.New(
     "/var/log/myapp/log.%Y%m%d",
-    rotatelogs.Handler(rotatelogs.HandlerFunc(func(e Event) {
+    rotatelogs.WithHandler(rotatelogs.HandlerFunc(func(e rotatelogs.Event) {
       if e.Type() != rotatelogs.FileRotatedEventType {
         return
       }
 
       // Do what you want with the data. This is just an idea:
-      storeLogFileToRemoteStorage(e.(*FileRotatedEvent).PreviousFile())
+      storeLogFileToRemoteStorage(e.(*rotatelogs.FileRotatedEvent).PreviousFile())
     })),
   )
 ```
